@@ -349,7 +349,7 @@ Bruno - [GitHub](https://github.com/bruno-portfolio) | [LinkedIn](https://www.li
 @software{brazil_soybean_forecast,
   author = {Bruno},
   title = {Brazil Soybean Yield Forecast},
-  year = {2024},
-  url = {https://github.com/yourusername/Brazil-Soybean-Forecast}
+  year = {2026},
+  url = {https://github.com/bruno-portfolio/Brazil-Soybean-Forecast}
 }
 ```
