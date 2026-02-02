@@ -339,7 +339,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Author
 
-Bruno - [GitHub](https://github.com/bruno) | [LinkedIn](https://linkedin.com/in/bruno)
+Bruno - [GitHub](https://github.com/bruno-portfolio) | [LinkedIn](https://www.linkedin.com/in/bruno-escalhao-32a41934b/)
 
 ---
 
