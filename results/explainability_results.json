@@ -1,0 +1,111 @@
+{
+  "model_version": "v1",
+  "gain_importance": {
+    "produtividade_ma3": 28122841072.0,
+    "trend": 26438799728.0,
+    "produtividade_lag1": 19473990914.0,
+    "precip_total_mm": 14566429962.0,
+    "tmin_avg": 5416688724.0,
+    "hot_days_count": 4257180264.0,
+    "tmax_avg": 1522824318.0,
+    "tmean_avg": 1296906470.0,
+    "gdd_accumulated": 843373340.0
+  },
+  "permutation_importance": {
+    "produtividade_lag1": 42.739380858847184,
+    "produtividade_ma3": 32.79703170291851,
+    "hot_days_count": 4.789871818915202,
+    "tmin_avg": 3.2981965565040126,
+    "trend": 0.0,
+    "gdd_accumulated": -0.08457660219619925,
+    "tmean_avg": -0.4936524580248204,
+    "tmax_avg": -1.027589690616196,
+    "precip_total_mm": -4.985336194890505
+  },
+  "shap_importance": {
+    "trend": 166.51026450250325,
+    "produtividade_ma3": 150.3203490136433,
+    "produtividade_lag1": 123.58956867354526,
+    "precip_total_mm": 78.9859245776324,
+    "tmin_avg": 55.9796228391588,
+    "hot_days_count": 52.22181639602615,
+    "tmax_avg": 9.882750945394179,
+    "gdd_accumulated": 6.243680292225544,
+    "tmean_avg": 5.581323307494378
+  },
+  "coherence_analysis": {
+    "precip_total_mm": {
+      "correlation": 0.712,
+      "mean_shap_low_values": -152.9,
+      "mean_shap_high_values": 79.48,
+      "direction": "positivo",
+      "expected_direction": "positivo",
+      "coherence": "coerente"
+    },
+    "tmean_avg": {
+      "correlation": 0.358,
+      "mean_shap_low_values": -6.95,
+      "mean_shap_high_values": -0.34,
+      "direction": "positivo",
+      "expected_direction": null,
+      "coherence": "nao-linear esperado"
+    },
+    "tmin_avg": {
+      "correlation": 0.784,
+      "mean_shap_low_values": -88.63,
+      "mean_shap_high_values": 63.11,
+      "direction": "positivo",
+      "expected_direction": "positivo",
+      "coherence": "coerente"
+    },
+    "tmax_avg": {
+      "correlation": -0.352,
+      "mean_shap_low_values": -1.21,
+      "mean_shap_high_values": -14.63,
+      "direction": "negativo",
+      "expected_direction": "negativo",
+      "coherence": "coerente"
+    },
+    "hot_days_count": {
+      "correlation": -0.892,
+      "mean_shap_low_values": 93.41,
+      "mean_shap_high_values": -75.41,
+      "direction": "negativo",
+      "expected_direction": "negativo",
+      "coherence": "coerente"
+    },
+    "gdd_accumulated": {
+      "correlation": -0.489,
+      "mean_shap_low_values": 4.16,
+      "mean_shap_high_values": -5.84,
+      "direction": "negativo",
+      "expected_direction": "positivo",
+      "coherence": "investigar"
+    },
+    "produtividade_lag1": {
+      "correlation": 0.926,
+      "mean_shap_low_values": -185.47,
+      "mean_shap_high_values": 192.02,
+      "direction": "positivo",
+      "expected_direction": "positivo",
+      "coherence": "coerente"
+    },
+    "produtividade_ma3": {
+      "correlation": 0.965,
+      "mean_shap_low_values": -247.85,
+      "mean_shap_high_values": 184.46,
+      "direction": "positivo",
+      "expected_direction": "positivo",
+      "coherence": "coerente"
+    },
+    "trend": {
+      "correlation": 0.809,
+      "mean_shap_low_values": -269.53,
+      "mean_shap_high_values": 252.15,
+      "direction": "positivo",
+      "expected_direction": "positivo",
+      "coherence": "coerente"
+    }
+  },
+  "n_samples_analyzed": 5000
+}

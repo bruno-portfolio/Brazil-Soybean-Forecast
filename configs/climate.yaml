@@ -1,0 +1,39 @@
+# Configuracao de dados climaticos (NASA POWER)
+climate:
+  # API NASA POWER
+  api:
+    base_url: "https://power.larc.nasa.gov/api/temporal/daily/point"
+    community: "AG"  # Agroclimatology
+    format: "JSON"
+
+  # Parametros climaticos
+  parameters:
+    - T2M
+    - T2M_MIN
+    - T2M_MAX
+    - PRECTOTCORR
+    - RH2M
+    - ALLSKY_SFC_SW_DWN
+    - WS2M
+
+  # Periodo temporal (alinhado com target)
+  year_start: 1999  # Um ano antes para permitir features lag
+  year_end: 2025
+
+  # Cache
+  cache:
+    enabled: true
+    format: "parquet"
+    partition_by: "municipality"
+
+  # Rate limiting
+  rate_limit:
+    requests_per_minute: 30
+    retry_attempts: 3
+    backoff_factor: 2
+
+  # Validacao
+  validation:
+    precip_min: 0
+    temp_consistency: true  # tmin <= tmean <= tmax
+    no_future_dates: true

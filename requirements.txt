@@ -1,0 +1,36 @@
+# Core dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+pyyaml>=6.0
+pyarrow>=14.0.0
+
+# Data validation
+pandera>=0.18.0
+
+# Logging
+loguru>=0.7.0
+
+# Machine Learning
+lightgbm>=4.0.0
+xgboost>=2.0.0
+catboost>=1.2.0
+scikit-learn>=1.3.0
+shap>=0.44.0
+joblib>=1.3.0
+
+# Statistics
+scipy>=1.11.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Google Earth Engine (NDVI)
+earthengine-api>=0.1.380
+geemap>=0.30.0
+
+# Dashboard (optional)
+streamlit>=1.29.0
+plotly>=5.18.0

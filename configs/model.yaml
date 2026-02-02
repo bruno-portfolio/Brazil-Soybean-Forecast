@@ -1,0 +1,44 @@
+# Configuracao do modelo
+model:
+  # Algoritmo principal
+  algorithm: "lightgbm"
+
+  # Hyperparameters LightGBM
+  lightgbm:
+    objective: "regression"
+    metric: "mae"
+    boosting_type: "gbdt"
+    num_leaves: 31
+    learning_rate: 0.05
+    n_estimators: 500
+    max_depth: -1
+    min_child_samples: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 0.1
+    random_state: 42
+    n_jobs: -1
+    verbose: -1
+
+  # Early stopping
+  early_stopping:
+    enabled: true
+    rounds: 50
+    verbose: false
+
+  # Metricas de avaliacao
+  metrics:
+    - mae       # Mean Absolute Error
+    - rmse      # Root Mean Square Error
+    - mape      # Mean Absolute Percentage Error
+
+  # Conversao para unidade agricola
+  output:
+    convert_to_sacks: true  # Converter kg/ha para sacas/ha (dividir por 60)
+
+  # Versionamento
+  versioning:
+    save_model: true
+    save_metadata: true
+    format: "pkl"

@@ -1,0 +1,33 @@
+# Configuracao do target (PAM/IBGE)
+target:
+  # Cultura
+  crop: "soja"
+  crop_code: 39  # Codigo SIDRA para soja
+
+  # Periodo temporal
+  year_start: 2000
+  year_end: 2023
+
+  # Tabela SIDRA
+  sidra_table: 5457  # ou 1612 como alternativa
+
+  # Variaveis
+  variables:
+    - rendimento_medio  # kg/ha
+    - area_colhida      # ha
+    - producao          # toneladas
+
+  # Validacao
+  validation:
+    productivity_min: 0
+    productivity_max: 10000  # kg/ha - limite tolerante para outliers (soja alta tecnologia ~5000-6000)
+    cross_check_tolerance: 0.05  # 5% de tolerancia na checagem producao/area
+
+  # Unidades
+  units:
+    productivity: "kg/ha"
+    area: "ha"
+    production: "ton"
+
+  # Conversao para sacas (60kg)
+  sacks_conversion: 60

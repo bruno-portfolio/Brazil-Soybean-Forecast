@@ -1,0 +1,44 @@
+{
+  "baseline_lag1": {
+    "name": "baseline_lag1",
+    "validation_metrics": {
+      "mae_kg_ha": 509.04,
+      "mae_sacas_ha": 8.48,
+      "rmse_kg_ha": 760.4,
+      "rmse_sacas_ha": 12.67,
+      "mape_percent": 19.95,
+      "n_samples": 7131
+    },
+    "test_metrics": {
+      "mae_kg_ha": 678.78,
+      "mae_sacas_ha": 11.31,
+      "rmse_kg_ha": 1059.15,
+      "rmse_sacas_ha": 17.65,
+      "mape_percent": 41.97,
+      "n_samples": 5021
+    },
+    "validation_coverage": 98.6,
+    "test_coverage": 97.9
+  },
+  "baseline_ma3": {
+    "name": "baseline_ma3",
+    "validation_metrics": {
+      "mae_kg_ha": 421.16,
+      "mae_sacas_ha": 7.02,
+      "rmse_kg_ha": 610.77,
+      "rmse_sacas_ha": 10.18,
+      "mape_percent": 17.16,
+      "n_samples": 7227
+    },
+    "test_metrics": {
+      "mae_kg_ha": 560.1,
+      "mae_sacas_ha": 9.34,
+      "rmse_kg_ha": 815.26,
+      "rmse_sacas_ha": 13.59,
+      "mape_percent": 36.09,
+      "n_samples": 5125
+    },
+    "validation_coverage": 100.0,
+    "test_coverage": 99.9
+  }
+}

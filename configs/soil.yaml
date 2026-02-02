@@ -1,0 +1,149 @@
+# Configuracao de dados de solo (SoilGrids)
+soil:
+  # API SoilGrids (ISRIC)
+  api:
+    base_url: "https://rest.isric.org/soilgrids/v2.0/properties/query"
+    # Documentacao: https://rest.isric.org/soilgrids/v2.0/docs
+
+  # Propriedades do solo a extrair
+  # Referencia: https://www.isric.org/explore/soilgrids/faq-soilgrids
+  properties:
+    - clay      # Fracao argila (g/kg) - afeta retencao de agua
+    - sand      # Fracao areia (g/kg) - afeta drenagem
+    - silt      # Fracao silte (g/kg) - complementa textura
+    - phh2o     # pH em agua (pH x 10) - afeta disponibilidade nutrientes
+    - soc       # Carbono organico (dg/kg) - indicador fertilidade
+    - nitrogen  # Nitrogenio total (cg/kg) - nutriente essencial
+    - cec       # Capacidade troca cationica (mmol(c)/kg)
+    - bdod      # Densidade aparente (cg/cm3) - compactacao
+
+  # Profundidades disponiveis no SoilGrids (cm)
+  # 0-5, 5-15, 15-30, 30-60, 60-100, 100-200
+  depths:
+    - "0-5cm"
+    - "5-15cm"
+    - "15-30cm"
+    - "30-60cm"
+    - "60-100cm"
+
+  # Agregacao vertical para features
+  # Zona radicular da soja: 0-100cm, maior concentracao em 0-30cm
+  aggregation:
+    # Camada superficial (maior atividade radicular)
+    surface:
+      depths: ["0-5cm", "5-15cm", "15-30cm"]
+      weight: 0.6  # 60% importancia
+      label: "0_30cm"
+
+    # Subsuperficie (reserva hidrica)
+    subsurface:
+      depths: ["30-60cm", "60-100cm"]
+      weight: 0.4  # 40% importancia
+      label: "30_100cm"
+
+  # Valores estatisticos a extrair (SoilGrids retorna distribuicao)
+  values:
+    - mean      # Media (principal)
+    # - Q0.05   # Percentil 5% (incerteza)
+    # - Q0.95   # Percentil 95% (incerteza)
+
+  # Cache
+  cache:
+    enabled: true
+    format: "parquet"
+    partition_by: "municipality"
+
+  # Rate limiting (API publica, ser conservador)
+  rate_limit:
+    requests_per_minute: 20
+    retry_attempts: 3
+    backoff_factor: 2
+    timeout_seconds: 60
+
+  # Validacao dos dados
+  validation:
+    # Limites fisicamente plausíveis
+    clay:
+      min: 0
+      max: 1000  # g/kg (0-100%)
+    sand:
+      min: 0
+      max: 1000
+    silt:
+      min: 0
+      max: 1000
+    phh2o:
+      min: 30    # pH 3.0
+      max: 100   # pH 10.0
+    soc:
+      min: 0
+      max: 5000  # dg/kg (0-500 g/kg)
+    nitrogen:
+      min: 0
+      max: 500   # cg/kg
+    cec:
+      min: 0
+      max: 1000  # mmol(c)/kg
+    bdod:
+      min: 50    # cg/cm3 (0.5 g/cm3 - muito poroso)
+      max: 200   # cg/cm3 (2.0 g/cm3 - muito compactado)
+
+  # Conversoes de unidades para features finais
+  conversions:
+    clay_to_percent: 0.1      # g/kg -> %
+    sand_to_percent: 0.1      # g/kg -> %
+    silt_to_percent: 0.1      # g/kg -> %
+    ph_to_real: 0.1           # pH x 10 -> pH
+    soc_to_gkg: 0.1           # dg/kg -> g/kg
+    nitrogen_to_gkg: 0.01     # cg/kg -> g/kg
+    bdod_to_gcm3: 0.01        # cg/cm3 -> g/cm3
+
+  # Features derivadas a calcular
+  derived_features:
+    # Razao argila/areia (indica estrutura do solo)
+    - name: clay_sand_ratio
+      formula: "clay / (sand + 1)"  # +1 evita divisao por zero
+
+    # Capacidade de agua disponivel estimada (AWC)
+    # Baseado em Saxton & Rawls (2006) - simplificado
+    - name: awc_estimated
+      formula: "0.76 * clay_pct - 0.4 * sand_pct + 2.5"
+      unit: "mm/cm"
+
+    # Indice de qualidade do solo (composto)
+    - name: soil_quality_index
+      formula: "0.4 * soc_norm + 0.3 * ph_norm + 0.3 * cec_norm"
+
+    # Flags categoricas
+    - name: ph_acidic
+      formula: "ph < 5.5"
+      description: "Solo acido - comum no Cerrado, requer calagem"
+
+    - name: texture_class
+      description: "Classe textural simplificada"
+      categories:
+        clayey: "clay_pct >= 35"
+        sandy: "sand_pct >= 70"
+        loamy: "otherwise"
+
+  # Interacoes solo x clima (calculadas no build_features)
+  interactions:
+    - name: clay_x_precip_deficit
+      soil_var: clay_0_30cm
+      climate_var: precip_anomaly
+      description: "Argila modera impacto de deficit hidrico"
+
+    - name: awc_x_dry_spell
+      soil_var: awc_estimated
+      climate_var: dry_spell_max
+      description: "Capacidade agua vs duracao seca"
+
+    - name: ph_x_region_cerrado
+      soil_var: ph_0_30cm
+      climate_var: is_cerrado
+      description: "pH interage com regiao (acidez Cerrado)"
+
+    - name: soc_x_temp_stress
+      soil_var: soc_0_30cm
+      climate_var: hot_days_anomaly
+      description: "Materia organica modera estresse termico"

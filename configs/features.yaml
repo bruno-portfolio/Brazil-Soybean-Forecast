@@ -1,0 +1,157 @@
+# Configuracao de engenharia de features
+features:
+  # Janela fenologica para soja
+  # Plantio e colheita variam por regiao conforme calendario CONAB
+  #
+  # Regioes e seus calendarios aproximados:
+  # - Cerrado Precoce (MT, GO, MS, TO): Set-Fev (plantio Set, colheita Jan-Fev)
+  # - Cerrado Tardio (BA, MA, PI): Out-Mar (plantio Out, colheita Fev-Mar)
+  # - Sul (RS, PR, SC): Out-Mar (plantio Out-Nov, colheita Mar-Abr)
+  # - Sudeste (SP, MG): Out-Mar (plantio Out-Nov, colheita Fev-Mar)
+  #
+  # Janela default (usada se regiao nao especificada)
+  phenology_window:
+    start_month: 10  # Outubro
+    end_month: 3     # Marco (ano seguinte)
+
+  # Janelas fenologicas por regiao (codigo IBGE da UF)
+  # Isso permite que cada regiao tenha periodo climatico mais apropriado
+  regional_phenology:
+    # Cerrado precoce: plantio antecipado (setembro)
+    # Mato Grosso
+    51:
+      start_month: 9   # Setembro
+      end_month: 2     # Fevereiro
+      phases:
+        plantio: [9, 10]      # Set-Out
+        vegetativo: [11, 12]  # Nov-Dez
+        enchimento: [1, 2]    # Jan-Fev
+
+    # Goias
+    52:
+      start_month: 9
+      end_month: 2
+      phases:
+        plantio: [9, 10]
+        vegetativo: [11, 12]
+        enchimento: [1, 2]
+
+    # Mato Grosso do Sul
+    50:
+      start_month: 9
+      end_month: 3
+      phases:
+        plantio: [9, 10]
+        vegetativo: [11, 12]
+        enchimento: [1, 2, 3]
+
+    # Tocantins
+    17:
+      start_month: 10
+      end_month: 2
+      phases:
+        plantio: [10, 11]
+        vegetativo: [12, 1]
+        enchimento: [1, 2]
+
+    # Sul: plantio mais tardio (outubro-novembro)
+    # Parana
+    41:
+      start_month: 10
+      end_month: 3
+      phases:
+        plantio: [10, 11]
+        vegetativo: [12, 1]
+        enchimento: [2, 3]
+
+    # Santa Catarina
+    42:
+      start_month: 10
+      end_month: 3
+      phases:
+        plantio: [10, 11]
+        vegetativo: [12, 1]
+        enchimento: [2, 3]
+
+    # Rio Grande do Sul (mais tardio ainda)
+    43:
+      start_month: 10
+      end_month: 4
+      phases:
+        plantio: [10, 11]
+        vegetativo: [12, 1]
+        enchimento: [2, 3, 4]
+
+    # Bahia (MATOPIBA)
+    29:
+      start_month: 10
+      end_month: 3
+      phases:
+        plantio: [10, 11]
+        vegetativo: [12, 1]
+        enchimento: [2, 3]
+
+    # Minas Gerais
+    31:
+      start_month: 10
+      end_month: 3
+      phases:
+        plantio: [10, 11]
+        vegetativo: [12, 1]
+        enchimento: [2, 3]
+
+    # Sao Paulo
+    35:
+      start_month: 10
+      end_month: 3
+      phases:
+        plantio: [10, 11]
+        vegetativo: [12, 1]
+        enchimento: [2, 3]
+
+  # Features climaticas agregadas na janela
+  climate_features:
+    - name: precip_total_mm
+      aggregation: sum
+      variable: precip
+
+    - name: tmean_avg
+      aggregation: mean
+      variable: tmean
+
+    - name: tmin_avg
+      aggregation: mean
+      variable: tmin
+
+    - name: tmax_avg
+      aggregation: mean
+      variable: tmax
+
+    - name: hot_days_count
+      aggregation: count
+      variable: tmax
+      threshold: 32  # Dias com Tmax > 32C (estresse termico)
+
+    - name: gdd_accumulated
+      aggregation: sum
+      variable: gdd
+      base_temp: 10  # Temperatura base para GDD
+
+  # Features historicas
+  historical_features:
+    - name: produtividade_lag1
+      type: lag
+      periods: 1
+
+    - name: produtividade_ma3
+      type: moving_average
+      window: 3
+
+    - name: trend
+      type: linear_trend
+      normalize: true  # Ano normalizado [0, 1]
+
+  # Tratamento de missing
+  missing:
+    strategy: "drop"  # ou "impute"
+    max_missing_ratio: 0.1  # 10% maximo de missing por feature

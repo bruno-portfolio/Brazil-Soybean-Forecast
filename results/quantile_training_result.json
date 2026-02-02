@@ -1,0 +1,93 @@
+{
+  "models": [
+    {
+      "quantile": 0.05,
+      "model_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\quantile_p05.pkl",
+      "best_iteration": 300,
+      "pinball_loss_test": 139.66899211929183,
+      "mae_test": 743.4526432357792
+    },
+    {
+      "quantile": 0.1,
+      "model_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\quantile_p10.pkl",
+      "best_iteration": 300,
+      "pinball_loss_test": 180.8076555391854,
+      "mae_test": 646.8852047191322
+    },
+    {
+      "quantile": 0.5,
+      "model_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\quantile_p50.pkl",
+      "best_iteration": 66,
+      "pinball_loss_test": 262.468901814024,
+      "mae_test": 524.937803628048
+    },
+    {
+      "quantile": 0.9,
+      "model_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\quantile_p90.pkl",
+      "best_iteration": 300,
+      "pinball_loss_test": 119.51661027464574,
+      "mae_test": 642.3580549996827
+    },
+    {
+      "quantile": 0.95,
+      "model_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\quantile_p95.pkl",
+      "best_iteration": 300,
+      "pinball_loss_test": 81.85336335608234,
+      "mae_test": 686.0940232159032
+    }
+  ],
+  "feature_names": [
+    "precip_total_mm",
+    "tmean_avg",
+    "tmin_avg",
+    "tmax_avg",
+    "hot_days_count",
+    "gdd_accumulated",
+    "precip_plantio_mm",
+    "tmean_plantio",
+    "tmin_plantio",
+    "tmax_plantio",
+    "hot_days_plantio",
+    "gdd_plantio",
+    "precip_vegetativo_mm",
+    "tmean_vegetativo",
+    "tmin_vegetativo",
+    "tmax_vegetativo",
+    "hot_days_vegetativo",
+    "gdd_vegetativo",
+    "precip_enchimento_mm",
+    "tmean_enchimento",
+    "tmin_enchimento",
+    "tmax_enchimento",
+    "hot_days_enchimento",
+    "gdd_enchimento",
+    "dry_spell_max",
+    "dry_spell_count_7d",
+    "dry_spell_count_10d",
+    "precip_cv",
+    "precip_days_gt1mm",
+    "oni_avg",
+    "oni_min",
+    "oni_max",
+    "oni_std",
+    "is_la_nina",
+    "is_el_nino",
+    "produtividade_lag1",
+    "produtividade_ma3",
+    "trend",
+    "precip_anomaly",
+    "temp_anomaly",
+    "hot_days_anomaly",
+    "gdd_anomaly",
+    "precip_enchimento_anomaly",
+    "dry_spell_anomaly",
+    "is_sul",
+    "sul_x_la_nina",
+    "sul_x_precip_anomaly",
+    "sul_x_hot_days_anomaly"
+  ],
+  "coverage_80": 0.5043906618119511,
+  "mean_interval_width": 860.7434101139406,
+  "training_time_seconds": 18.195666313171387,
+  "training_date": "2026-01-24T11:18:48.145113"
+}

@@ -1,0 +1,276 @@
+{
+  "model_version": "v1",
+  "model_metrics": {
+    "validation": {
+      "mae_kg_ha": 396.22,
+      "mae_sacas_ha": 6.6,
+      "rmse_kg_ha": 553.23,
+      "rmse_sacas_ha": 9.22,
+      "mape_percent": 16.45,
+      "n_samples": 6344
+    },
+    "test": {
+      "mae_kg_ha": 532.22,
+      "mae_sacas_ha": 8.87,
+      "rmse_kg_ha": 770.35,
+      "rmse_sacas_ha": 12.84,
+      "mape_percent": 36.13,
+      "n_samples": 4548
+    }
+  },
+  "error_by_uf": [
+    {
+      "uf": "MS",
+      "mae_kg_ha": 885.96,
+      "mae_sacas_ha": 14.77,
+      "mape_percent": 73.52,
+      "n_samples": 151,
+      "mean_actual": 2829.8741721854303
+    },
+    {
+      "uf": "RS",
+      "mae_kg_ha": 879.98,
+      "mae_sacas_ha": 14.67,
+      "mape_percent": 88.08,
+      "n_samples": 818,
+      "mean_actual": 1898.9144254278729
+    },
+    {
+      "uf": "PR",
+      "mae_kg_ha": 831.72,
+      "mae_sacas_ha": 13.86,
+      "mape_percent": 64.26,
+      "n_samples": 750,
+      "mean_actual": 2917.4893333333334
+    },
+    {
+      "uf": "AM",
+      "mae_kg_ha": 693.0,
+      "mae_sacas_ha": 11.55,
+      "mape_percent": 32.19,
+      "n_samples": 2,
+      "mean_actual": 2418.5
+    },
+    {
+      "uf": "CE",
+      "mae_kg_ha": 641.43,
+      "mae_sacas_ha": 10.69,
+      "mape_percent": 16.02,
+      "n_samples": 2,
+      "mean_actual": 3846.0
+    },
+    {
+      "uf": "SC",
+      "mae_kg_ha": 612.86,
+      "mae_sacas_ha": 10.21,
+      "mape_percent": 29.5,
+      "n_samples": 369,
+      "mean_actual": 3060.2601626016262
+    },
+    {
+      "uf": "RR",
+      "mae_kg_ha": 418.05,
+      "mae_sacas_ha": 6.97,
+      "mape_percent": 11.82,
+      "n_samples": 14,
+      "mean_actual": 3492.4285714285716
+    },
+    {
+      "uf": "BA",
+      "mae_kg_ha": 401.45,
+      "mae_sacas_ha": 6.69,
+      "mape_percent": 20.28,
+      "n_samples": 39,
+      "mean_actual": 3508.5641025641025
+    },
+    {
+      "uf": "SP",
+      "mae_kg_ha": 371.03,
+      "mae_sacas_ha": 6.18,
+      "mape_percent": 12.02,
+      "n_samples": 824,
+      "mean_actual": 3284.3021844660193
+    },
+    {
+      "uf": "PI",
+      "mae_kg_ha": 299.65,
+      "mae_sacas_ha": 4.99,
+      "mape_percent": 9.34,
+      "n_samples": 54,
+      "mean_actual": 3455.9074074074074
+    },
+    {
+      "uf": "RO",
+      "mae_kg_ha": 299.32,
+      "mae_sacas_ha": 4.99,
+      "mape_percent": 8.15,
+      "n_samples": 67,
+      "mean_actual": 3592.597014925373
+    },
+    {
+      "uf": "AC",
+      "mae_kg_ha": 295.86,
+      "mae_sacas_ha": 4.93,
+      "mape_percent": 7.51,
+      "n_samples": 5,
+      "mean_actual": 3736.8
+    },
+    {
+      "uf": "GO",
+      "mae_kg_ha": 271.13,
+      "mae_sacas_ha": 4.52,
+      "mape_percent": 7.84,
+      "n_samples": 403,
+      "mean_actual": 3537.377171215881
+    },
+    {
+      "uf": "AL",
+      "mae_kg_ha": 261.97,
+      "mae_sacas_ha": 4.37,
+      "mape_percent": 7.98,
+      "n_samples": 11,
+      "mean_actual": 3196.6363636363635
+    },
+    {
+      "uf": "MG",
+      "mae_kg_ha": 247.53,
+      "mae_sacas_ha": 4.13,
+      "mape_percent": 6.53,
+      "n_samples": 435,
+      "mean_actual": 3714.7885057471262
+    },
+    {
+      "uf": "AP",
+      "mae_kg_ha": 242.62,
+      "mae_sacas_ha": 4.04,
+      "mape_percent": 9.13,
+      "n_samples": 5,
+      "mean_actual": 2701.4
+    },
+    {
+      "uf": "MT",
+      "mae_kg_ha": 226.23,
+      "mae_sacas_ha": 3.77,
+      "mape_percent": 6.16,
+      "n_samples": 245,
+      "mean_actual": 3611.208163265306
+    },
+    {
+      "uf": "PA",
+      "mae_kg_ha": 225.48,
+      "mae_sacas_ha": 3.76,
+      "mape_percent": 8.42,
+      "n_samples": 57,
+      "mean_actual": 3069.2982456140353
+    },
+    {
+      "uf": "TO",
+      "mae_kg_ha": 220.75,
+      "mae_sacas_ha": 3.68,
+      "mape_percent": 7.08,
+      "n_samples": 177,
+      "mean_actual": 3187.7118644067796
+    },
+    {
+      "uf": "MA",
+      "mae_kg_ha": 177.03,
+      "mae_sacas_ha": 2.95,
+      "mape_percent": 5.51,
+      "n_samples": 118,
+      "mean_actual": 3201.4406779661017
+    },
+    {
+      "uf": "DF",
+      "mae_kg_ha": 49.91,
+      "mae_sacas_ha": 0.83,
+      "mape_percent": 1.39,
+      "n_samples": 2,
+      "mean_actual": 3600.0
+    }
+  ],
+  "error_by_year": [
+    {
+      "ano": 2019,
+      "mae_kg_ha": 386.39,
+      "mae_sacas_ha": 6.44,
+      "mape_percent": 16.34,
+      "n_samples": 2061,
+      "mean_actual": 3055.19262493935
+    },
+    {
+      "ano": 2020,
+      "mae_kg_ha": 457.95,
+      "mae_sacas_ha": 7.63,
+      "mape_percent": 22.0,
+      "n_samples": 2111,
+      "mean_actual": 3090.5390810042636
+    },
+    {
+      "ano": 2021,
+      "mae_kg_ha": 345.54,
+      "mae_sacas_ha": 5.76,
+      "mape_percent": 11.15,
+      "n_samples": 2172,
+      "mean_actual": 3279.70211786372
+    },
+    {
+      "ano": 2022,
+      "mae_kg_ha": 667.51,
+      "mae_sacas_ha": 11.13,
+      "mape_percent": 57.52,
+      "n_samples": 2245,
+      "mean_actual": 2767.0721603563475
+    },
+    {
+      "ano": 2023,
+      "mae_kg_ha": 400.34,
+      "mae_sacas_ha": 6.67,
+      "mape_percent": 15.27,
+      "n_samples": 2303,
+      "mean_actual": 3272.0299609205385
+    }
+  ],
+  "error_by_range": [
+    {
+      "faixa": "0-1500",
+      "mae_kg_ha": 1685.33,
+      "mae_sacas_ha": 28.09,
+      "mape_percent": 223.89,
+      "n_samples": 483,
+      "mean_actual": 990.7515527950311
+    },
+    {
+      "faixa": "1500-2500",
+      "mae_kg_ha": 744.43,
+      "mae_sacas_ha": 12.41,
+      "mape_percent": 38.34,
+      "n_samples": 644,
+      "mean_actual": 2068.3260869565215
+    },
+    {
+      "faixa": "3500+",
+      "mae_kg_ha": 412.03,
+      "mae_sacas_ha": 6.87,
+      "mape_percent": 10.49,
+      "n_samples": 1845,
+      "mean_actual": 3817.20162601626
+    },
+    {
+      "faixa": "2500-3000",
+      "mae_kg_ha": 281.04,
+      "mae_sacas_ha": 4.68,
+      "mape_percent": 10.03,
+      "n_samples": 660,
+      "mean_actual": 2850.5015151515154
+    },
+    {
+      "faixa": "3000-3500",
+      "mae_kg_ha": 198.07,
+      "mae_sacas_ha": 3.3,
+      "mape_percent": 6.02,
+      "n_samples": 916,
+      "mean_actual": 3289.2565502183406
+    }
+  ],
+  "beat_baseline_ma3": true
+}

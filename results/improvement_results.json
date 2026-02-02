@@ -1,0 +1,9 @@
+{
+  "baseline_ma3_mae": 560.1003577235772,
+  "ensemble_mae": 484.59245621394746,
+  "improvement_pct": 13.481137883310309,
+  "mae_sul": 720.1714314527073,
+  "mae_outros": 324.7104920165317,
+  "n_features": 93,
+  "n_test_samples": 5125
+}

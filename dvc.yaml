@@ -1,0 +1,107 @@
+stages:
+  ingest_municipalities:
+    cmd: python -m src.ingest.municipalities
+    deps:
+      - src/ingest/municipalities.py
+      - configs/geo.yaml
+    outs:
+      - data/processed/municipalities.parquet
+
+  ingest_target:
+    cmd: python -m src.ingest.pam
+    deps:
+      - src/ingest/pam.py
+      - configs/target.yaml
+      - data/processed/municipalities.parquet
+    outs:
+      - data/processed/target_soja.parquet
+
+  ingest_climate:
+    cmd: python -m src.ingest.climate_power
+    deps:
+      - src/ingest/climate_power.py
+      - configs/climate.yaml
+      - data/processed/municipalities.parquet
+    outs:
+      - data/processed/climate_daily.parquet
+    cache: true
+
+  ingest_soil:
+    cmd: python -m src.ingest.soilgrids
+    deps:
+      - src/ingest/soilgrids.py
+      - configs/soil.yaml
+      - data/processed/municipalities.parquet
+      - data/processed/target_soja.parquet
+    outs:
+      - data/processed/soil_properties.parquet
+    cache: true
+
+  ingest_ndvi:
+    cmd: python -m src.ingest.ndvi
+    deps:
+      - src/ingest/ndvi.py
+      - configs/ndvi.yaml
+      - data/raw/ndvi/appeears_ndvi.csv
+    outs:
+      - data/processed/ndvi_safra.parquet
+    cache: true
+
+  build_features:
+    cmd: python -m src.features.build_features
+    deps:
+      - src/features/build_features.py
+      - configs/features.yaml
+      - data/processed/target_soja.parquet
+      - data/processed/climate_daily.parquet
+      - data/processed/soil_properties.parquet
+    outs:
+      - data/processed/dataset_final.parquet
+
+  train:
+    cmd: python -m src.modeling.train
+    deps:
+      - src/modeling/train.py
+      - src/modeling/baselines.py
+      - configs/model.yaml
+      - configs/split.yaml
+      - data/processed/dataset_final.parquet
+    outs:
+      - models/model_v1.pkl
+    metrics:
+      - results/metrics.json:
+          cache: false
+
+  evaluate:
+    cmd: python -m src.evaluation.evaluate
+    deps:
+      - src/evaluation/evaluate.py
+      - models/model_v1.pkl
+      - data/processed/dataset_final.parquet
+    plots:
+      - results/predictions_scatter.png:
+          cache: false
+    metrics:
+      - results/evaluation_report.json:
+          cache: false
+
+  explain:
+    cmd: python -m src.evaluation.explainability
+    deps:
+      - src/evaluation/explainability.py
+      - models/model_v1.pkl
+      - data/processed/dataset_final.parquet
+    plots:
+      - results/shap_summary.png:
+          cache: false
+      - results/feature_importance.png:
+          cache: false
+
+  predict:
+    cmd: python -m src.inference.predict
+    deps:
+      - src/inference/predict.py
+      - models/model_v1.pkl
+      - data/processed/climate_daily.parquet
+    outs:
+      - results/predictions_2024_2025.parquet

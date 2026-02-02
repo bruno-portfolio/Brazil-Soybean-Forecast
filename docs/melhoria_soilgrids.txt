@@ -1,0 +1,239 @@
+================================================================================
+MELHORIA DO MODELO: INTEGRACAO DE DADOS DE SOLO VIA SOILGRIDS
+================================================================================
+
+Data: Janeiro 2026
+Projeto: Modelo de Produtividade de Soja - Brasil
+
+--------------------------------------------------------------------------------
+1. CONTEXTO E MOTIVACAO
+--------------------------------------------------------------------------------
+
+O modelo atual utiliza 54 features baseadas principalmente em:
+- Dados climaticos (NASA POWER)
+- Indices ENSO (NOAA)
+- Historico de produtividade
+- Anomalias climaticas e interacoes regionais
+
+Performance atual:
+- MAE: 551 kg/ha (~9.2 sacas/ha)
+- MAPE: 37.6%
+- Erro relativo: ~20%
+
+LACUNA IDENTIFICADA:
+O solo e um fator determinante na produtividade agricola, mas nao esta
+representado no modelo. Caracteristicas como textura, pH, materia organica
+e capacidade de retencao de agua influenciam diretamente:
+- Disponibilidade hidrica para a planta
+- Disponibilidade de nutrientes
+- Resposta a eventos climaticos extremos
+
+--------------------------------------------------------------------------------
+2. SOILGRIDS - FONTE DE DADOS
+--------------------------------------------------------------------------------
+
+O SoilGrids (https://soilgrids.org) e um sistema global de mapeamento de solos
+desenvolvido pela ISRIC - World Soil Information. Oferece:
+
+Resolucao espacial: 250m
+Cobertura: Global (incluindo todo o Brasil)
+Acesso: API REST gratuita (sem necessidade de autenticacao)
+Profundidades: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
+
+VARIAVEIS DISPONIVEIS:
++------------------+------------------------------------------+-------------+
+| Variavel         | Descricao                                | Unidade     |
++------------------+------------------------------------------+-------------+
+| clay             | Fracao argila                            | g/kg        |
+| sand             | Fracao areia                             | g/kg        |
+| silt             | Fracao silte                             | g/kg        |
+| phh2o            | pH em agua                               | pH x 10     |
+| soc              | Carbono organico do solo                 | dg/kg       |
+| nitrogen         | Nitrogenio total                         | cg/kg       |
+| cec              | Capacidade de troca cationica            | mmol(c)/kg  |
+| bdod             | Densidade aparente                       | cg/cm3      |
+| cfvo             | Fragmentos grosseiros volumetricos       | cm3/dm3     |
+| ocd              | Densidade de carbono organico            | hg/m3       |
+| ocs              | Estoque de carbono organico              | t/ha        |
++------------------+------------------------------------------+-------------+
+
+--------------------------------------------------------------------------------
+3. ESTRATEGIA DE INTEGRACAO
+--------------------------------------------------------------------------------
+
+3.1 EXTRACAO DE DADOS
+- Query da API SoilGrids por coordenadas (lat/lon) de cada municipio
+- Usar centroide do municipio (ja disponivel em municipalities.parquet)
+- Extrair variaveis para profundidades relevantes (0-30cm e 30-100cm)
+- Cache local em Parquet para evitar requisicoes repetidas
+
+3.2 AGREGACAO VERTICAL
+Para soja, a zona radicular efetiva e de 0-100cm, com maior concentracao
+em 0-30cm. Estrategia de agregacao:
+
+Profundidade 0-30cm (camada superficial):
+- Peso: 60% (maior atividade radicular)
+- Relevante para: pH, nutrientes, materia organica
+
+Profundidade 30-100cm (subsuperficie):
+- Peso: 40% (reserva hidrica)
+- Relevante para: textura, capacidade de agua
+
+3.3 FEATURES A SEREM CRIADAS
+
+Features Diretas (8):
+- clay_0_30cm: Teor de argila camada superficial (%)
+- sand_0_30cm: Teor de areia camada superficial (%)
+- ph_0_30cm: pH camada superficial
+- soc_0_30cm: Carbono organico camada superficial (g/kg)
+- clay_30_100cm: Teor de argila subsuperficie (%)
+- cec_0_30cm: CTC camada superficial (cmol/kg)
+- bdod_0_30cm: Densidade aparente (g/cm3)
+- nitrogen_0_30cm: Nitrogenio total (g/kg)
+
+Features Derivadas (6):
+- awc_estimated: Capacidade de agua disponivel estimada
+- texture_class: Classe textural (argiloso, arenoso, franco)
+- soil_quality_index: Indice composto de qualidade
+- ph_acidity_flag: Solo acido (pH < 5.5) - comum no Cerrado
+- clay_sand_ratio: Razao argila/areia
+- soc_density: Densidade de carbono organico
+
+Features de Interacao Solo x Clima (4):
+- clay_x_precip_deficit: Argila x deficit hidrico
+- awc_x_dry_spell: Capacidade agua x dias secos
+- ph_x_region: pH x regiao (Cerrado vs Sul)
+- soc_x_temp_stress: Carbono organico x estresse termico
+
+TOTAL: 18 novas features (54 atuais + 18 = 72 features)
+
+--------------------------------------------------------------------------------
+4. ETAPAS DE IMPLEMENTACAO
+--------------------------------------------------------------------------------
+
+ETAPA 1: Configuracao (configs/soil.yaml)
+- Definir variaveis a extrair
+- Configurar profundidades e pesos de agregacao
+- Estabelecer limites de validacao
+
+ETAPA 2: Modulo de Ingestao (src/ingest/soilgrids.py)
+- Implementar cliente da API SoilGrids
+- Funcao de extracao por coordenadas
+- Sistema de cache em Parquet
+- Rate limiting e retry com backoff
+- Validacao dos dados extraidos
+
+ETAPA 3: Feature Engineering (src/features/soil_features.py)
+- Agregacao vertical por profundidade
+- Calculo de features derivadas
+- Geracao de interacoes solo x clima
+- Merge com dataset existente
+
+ETAPA 4: Integracao no Pipeline (dvc.yaml)
+- Novo estagio: ingest_soil
+- Atualizar estagio: build_features
+- Dependencias e outputs
+
+ETAPA 5: Retreinamento e Avaliacao
+- Treinar modelos com novas features
+- Comparar metricas (MAE, RMSE, MAPE)
+- Analisar feature importance
+- Validar em diferentes regioes
+
+--------------------------------------------------------------------------------
+5. EXPECTATIVAS E METRICAS DE SUCESSO
+--------------------------------------------------------------------------------
+
+HIPOTESES:
+
+H1: Features de solo melhoram predicao geral
+    - Expectativa: Reducao de 5-10% no MAE global
+    - Racional: Textura e pH explicam variabilidade nao capturada pelo clima
+
+H2: Melhoria mais expressiva no Cerrado
+    - Expectativa: Reducao de 10-15% no MAE regional Cerrado
+    - Racional: Solos acidos e baixa CTC sao limitantes conhecidos
+
+H3: Interacoes solo x clima capturam resiliencia a secas
+    - Expectativa: Reducao de erro em anos La Nina (secas no Sul)
+    - Racional: Solos argilosos retêm mais agua, bufferizando deficit
+
+METRICAS DE SUCESSO:
+
+| Metrica                    | Atual      | Meta Minima | Meta Otimista |
+|----------------------------|------------|-------------|---------------|
+| MAE Global (kg/ha)         | 551        | 520 (-6%)   | 470 (-15%)    |
+| MAE Sul (kg/ha)            | 747        | 700 (-6%)   | 635 (-15%)    |
+| MAE Cerrado (kg/ha)        | 418        | 390 (-7%)   | 355 (-15%)    |
+| MAPE Global (%)            | 37.6%      | 35%         | 32%           |
+
+CRITERIO DE ACEITE:
+- Reducao minima de 5% no MAE global
+- Nenhuma degradacao significativa em subregioes
+- Features de solo no top-20 de importancia
+
+--------------------------------------------------------------------------------
+6. RISCOS E MITIGACOES
+--------------------------------------------------------------------------------
+
+RISCO 1: Resolucao espacial insuficiente
+- SoilGrids tem 250m, mas usamos centroide do municipio
+- Heterogeneidade intra-municipal nao capturada
+- Mitigacao: Aceitar como proxy; considerar media de pontos no futuro
+
+RISCO 2: API instavel ou lenta
+- 2.763 municipios = muitas requisicoes
+- Mitigacao: Cache agressivo, retry com backoff, processamento em lotes
+
+RISCO 3: Dados faltantes para algumas regioes
+- Possivel ausencia de dados em areas remotas
+- Mitigacao: Imputacao por mediana regional (UF)
+
+RISCO 4: Overfitting com muitas features
+- 72 features pode ser excessivo
+- Mitigacao: Selecao de features, regularizacao, validacao cruzada
+
+RISCO 5: Multicolinearidade
+- Features de solo podem ser correlacionadas entre si
+- Mitigacao: VIF analysis, remocao de features redundantes
+
+--------------------------------------------------------------------------------
+7. CRONOGRAMA ESTIMADO
+--------------------------------------------------------------------------------
+
+Fase 1 - Infraestrutura (atual)
+- Criar configuracao e modulo de ingestao
+- Testar com amostra de municipios
+
+Fase 2 - Extracao Completa
+- Extrair dados para todos os 2.763 municipios
+- Validar cobertura e qualidade
+
+Fase 3 - Feature Engineering
+- Implementar agregacao e features derivadas
+- Integrar ao pipeline existente
+
+Fase 4 - Modelagem
+- Retreinar modelos regionais
+- Avaliar impacto nas metricas
+
+Fase 5 - Documentacao
+- Atualizar README e documentacao
+- Registrar resultados e aprendizados
+
+--------------------------------------------------------------------------------
+8. REFERENCIAS
+--------------------------------------------------------------------------------
+
+SoilGrids:
+- Poggio et al. (2021). SoilGrids 2.0: producing soil information for the globe
+  with quantified spatial uncertainty. SOIL, 7(1), 217-240.
+- API Docs: https://rest.isric.org/soilgrids/v2.0/docs
+
+Soja e Solo:
+- EMBRAPA Soja - Manejo do Solo para a Cultura da Soja
+- Tecnologias de Producao de Soja - Regiao Central do Brasil
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

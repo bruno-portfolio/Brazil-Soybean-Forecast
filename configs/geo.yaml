@@ -1,0 +1,46 @@
+# Configuracao de identidade geografica
+geo:
+  # Fonte dos dados de municipios
+  source: "ibge_malha"
+
+  # Limites geograficos do Brasil para validacao
+  # Nota: lon_max inclui Fernando de Noronha (-32.42)
+  bounds:
+    lat_min: -33.75
+    lat_max: 5.27
+    lon_min: -73.99
+    lon_max: -32.0
+
+  # Numero esperado de municipios (com tolerancia)
+  expected_municipalities: 5570
+  tolerance: 20
+
+  # UFs validas
+  valid_ufs:
+    - AC
+    - AL
+    - AP
+    - AM
+    - BA
+    - CE
+    - DF
+    - ES
+    - GO
+    - MA
+    - MT
+    - MS
+    - MG
+    - PA
+    - PB
+    - PR
+    - PE
+    - PI
+    - RJ
+    - RN
+    - RS
+    - RO
+    - RR
+    - SC
+    - SP
+    - SE
+    - TO

@@ -1,0 +1,22 @@
+# Configuracao de split temporal
+split:
+  # Split estritamente temporal (sem leakage)
+  train:
+    end_year: 2018  # Treino: <= 2018
+
+  validation:
+    start_year: 2019
+    end_year: 2021  # Validacao: 2019-2021
+
+  test:
+    start_year: 2022
+    end_year: 2023  # Teste: 2022-2023
+
+  # Anos para inferencia futura
+  inference:
+    years: [2024, 2025]
+
+  # Validacao de integridade
+  checks:
+    no_train_future_leak: true  # Nenhuma linha de treino com ano > train.end_year
+    temporal_order: true        # train < validation < test

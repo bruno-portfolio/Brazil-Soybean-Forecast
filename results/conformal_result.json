@@ -1,0 +1,12 @@
+{
+  "sul_calibrator_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\conformal_sul.pkl",
+  "cerrado_calibrator_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\conformal_cerrado.pkl",
+  "coverage_80_sul": 0.579212916246216,
+  "coverage_80_cerrado": 0.819129140305173,
+  "coverage_80_combined": 0.7172842150353395,
+  "coverage_90_sul": 0.7013118062563067,
+  "coverage_90_cerrado": 0.9129140305173056,
+  "coverage_90_combined": 0.823088455772114,
+  "interval_width_80": 1212.9557478643776,
+  "interval_width_90": 1653.726098080048
+}

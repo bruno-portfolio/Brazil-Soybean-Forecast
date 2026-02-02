@@ -1,0 +1,131 @@
+{
+  "inference_date": "2026-01-24T16:55:33.882105",
+  "model_version": "v1",
+  "prediction_type": "ex-post",
+  "prediction_description": "Previsoes usando clima observado (nao e forecast real)",
+  "years_predicted": [
+    2024,
+    2025
+  ],
+  "n_municipalities": 2456,
+  "n_predictions": 4912,
+  "dataset_hash": "52fe7aeca741",
+  "model_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\model_v1.pkl",
+  "feature_names": [
+    "precip_total_mm",
+    "tmean_avg",
+    "tmin_avg",
+    "tmax_avg",
+    "hot_days_count",
+    "gdd_accumulated",
+    "precip_plantio_mm",
+    "tmean_plantio",
+    "tmin_plantio",
+    "tmax_plantio",
+    "hot_days_plantio",
+    "gdd_plantio",
+    "precip_vegetativo_mm",
+    "tmean_vegetativo",
+    "tmin_vegetativo",
+    "tmax_vegetativo",
+    "hot_days_vegetativo",
+    "gdd_vegetativo",
+    "precip_enchimento_mm",
+    "tmean_enchimento",
+    "tmin_enchimento",
+    "tmax_enchimento",
+    "hot_days_enchimento",
+    "gdd_enchimento",
+    "dry_spell_max",
+    "dry_spell_count_7d",
+    "dry_spell_count_10d",
+    "precip_cv",
+    "precip_days_gt1mm",
+    "oni_avg",
+    "oni_min",
+    "oni_max",
+    "oni_std",
+    "is_la_nina",
+    "is_el_nino",
+    "produtividade_lag1",
+    "produtividade_ma3",
+    "trend",
+    "precip_anomaly",
+    "temp_anomaly",
+    "hot_days_anomaly",
+    "gdd_anomaly",
+    "precip_enchimento_anomaly",
+    "dry_spell_anomaly",
+    "la_nina_x_precip_ench_anom",
+    "dry_spell_x_hot_anom",
+    "la_nina_x_precip_anom",
+    "heat_drought_stress",
+    "enchimento_stress",
+    "el_nino_x_precip_anom",
+    "is_sul",
+    "sul_x_la_nina",
+    "sul_x_precip_anomaly",
+    "sul_x_hot_days_anomaly"
+  ],
+  "model_test_metrics": {},
+  "statistics_by_year": {
+    "2024": {
+      "n_municipalities": 2456,
+      "pred_mean_kg_ha": 3219.9,
+      "pred_median_kg_ha": 3238.7,
+      "pred_std_kg_ha": 428.1,
+      "pred_min_kg_ha": 2010.9,
+      "pred_max_kg_ha": 3920.4
+    },
+    "2025": {
+      "n_municipalities": 2456,
+      "pred_mean_kg_ha": 3192.8,
+      "pred_median_kg_ha": 3254.8,
+      "pred_std_kg_ha": 464.0,
+      "pred_min_kg_ha": 1916.4,
+      "pred_max_kg_ha": 3934.1
+    }
+  },
+  "statistics_by_uf": {
+    "SP": {
+      "n_municipalities": 914,
+      "pred_mean_kg_ha": 3302.2
+    },
+    "RS": {
+      "n_municipalities": 850,
+      "pred_mean_kg_ha": 2610.2
+    },
+    "PR": {
+      "n_municipalities": 766,
+      "pred_mean_kg_ha": 3064.6
+    },
+    "MG": {
+      "n_municipalities": 514,
+      "pred_mean_kg_ha": 3673.1
+    },
+    "GO": {
+      "n_municipalities": 420,
+      "pred_mean_kg_ha": 3514.5
+    },
+    "SC": {
+      "n_municipalities": 408,
+      "pred_mean_kg_ha": 3183.5
+    },
+    "MT": {
+      "n_municipalities": 254,
+      "pred_mean_kg_ha": 3581.8
+    },
+    "TO": {
+      "n_municipalities": 184,
+      "pred_mean_kg_ha": 3233.0
+    },
+    "MS": {
+      "n_municipalities": 154,
+      "pred_mean_kg_ha": 3286.2
+    },
+    "MA": {
+      "n_municipalities": 142,
+      "pred_mean_kg_ha": 3230.3
+    }
+  }
+}

@@ -1,0 +1,53 @@
+# Configuracao NDVI via AppEEARS (NASA)
+ndvi:
+  # Fonte: MODIS MOD13Q1 (Terra) - NDVI 16 dias, 250m
+  source:
+    product: "MOD13Q1.061"
+    layer: "_250m_16_days_NDVI"
+    provider: "AppEEARS/NASA"
+
+  # Arquivo de entrada (baixado do AppEEARS)
+  input:
+    file: "data/raw/ndvi/appeears_ndvi.csv"
+    # Colunas esperadas: id (cod_ibge), date, ndvi
+
+  # Agregacao por safra (Out-Mar)
+  aggregation:
+    # Janela da safra de soja
+    start_month: 10  # Outubro
+    end_month: 3     # Marco
+
+    # Fases fenologicas para NDVI
+    phases:
+      plantio: [10, 11]      # Estabelecimento
+      vegetativo: [12, 1]    # Crescimento
+      enchimento: [2, 3]     # Enchimento de graos
+
+  # Features a calcular
+  features:
+    - name: ndvi_mean_safra
+      description: "NDVI medio da safra (Out-Mar)"
+
+    - name: ndvi_max_safra
+      description: "NDVI maximo (pico vegetativo)"
+
+    - name: ndvi_min_safra
+      description: "NDVI minimo da safra"
+
+    - name: ndvi_amplitude
+      description: "Amplitude NDVI (max - min)"
+
+    - name: ndvi_enchimento
+      description: "NDVI medio no enchimento (Fev-Mar)"
+
+    - name: ndvi_vegetativo
+      description: "NDVI medio fase vegetativa (Dez-Jan)"
+
+  # Escala NDVI do MODIS
+  scale:
+    factor: 0.0001  # MODIS NDVI vem em escala 0-10000
+    valid_range: [0, 10000]
+
+  # Output
+  output:
+    file: "data/processed/ndvi_safra.parquet"
