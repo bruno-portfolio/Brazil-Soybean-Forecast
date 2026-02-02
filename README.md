@@ -1,8 +1,13 @@
 # Brazil Soybean Yield Forecast
 
-![CI](https://github.com/yourusername/Brazil-Soybean-Forecast/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/bruno-portfolio/Brazil-Soybean-Forecast/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Model MAE](https://img.shields.io/badge/MAE-485_kg%2Fha-brightgreen)
+![Features](https://img.shields.io/badge/Features-94-orange)
+![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white)
+![LightGBM](https://img.shields.io/badge/LightGBM-Ensemble-9cf)
+![XGBoost](https://img.shields.io/badge/XGBoost-Ensemble-blue)
 
 ## TL;DR
 
@@ -16,7 +21,11 @@
 - 94 engineered features including ETo, water deficit, NDVI, and climate interactions
 - Interactive Streamlit dashboard for municipality analysis
 
----
+<img width="1435" height="877" alt="image" src="https://github.com/user-attachments/assets/68f84fb4-44ca-443a-aa97-038fe364b8e1" />
+<img width="1123" height="454" alt="image" src="https://github.com/user-attachments/assets/942a82f9-991b-409a-acf3-568c6d38df95" />
+<img width="1459" height="756" alt="image" src="https://github.com/user-attachments/assets/ad62e1c8-66d3-4dfa-9731-b5cd010be8c1" />
+<img width="1452" height="844" alt="image" src="https://github.com/user-attachments/assets/833322c5-6e26-4a1b-83ca-963e4f86cfcd" />
+<img width="1422" height="868" alt="image" src="https://github.com/user-attachments/assets/c49461be-0ac9-4f7b-999d-ad69a7c67f7c" />
 
 ## What's New in v2.0
 
@@ -84,6 +93,13 @@ The 2022 test period coincides with a severe La Niña event that caused historic
 ---
 
 ## Quick Start
+
+pip install -r requirements.txt
+pip install pyyaml  # if yaml error
+
+**Note:** Large climate files (`climate_daily.parquet`, ~550MB) are not included in the repo.
+
+**Run** `python run_improvements.py --climate` to generate them, or use the pre-processed `dataset_final.parquet` for quick testing.
 
 ### Option 1: Quick Run (uses existing processed data)
 ```bash
