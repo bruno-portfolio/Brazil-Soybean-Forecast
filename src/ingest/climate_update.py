@@ -67,7 +67,7 @@ def download_new_params(cod_ibge: int, lat: float, lon: float, config: dict) -> 
         records = []
         first_param = list(params.keys())[0]
 
-        for date_str in params[first_param].keys():
+        for date_str in params[first_param]:
             record = {"date": date_str}
             for param_name, param_values in params.items():
                 value = param_values.get(date_str)

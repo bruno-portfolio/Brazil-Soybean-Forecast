@@ -74,7 +74,6 @@ def get_ndvi_for_point(lon: float, lat: float, start_date: str, end_date: str) -
     with_values = collection.map(extract_value)
 
     values = with_values.aggregate_array("ndvi_value").getInfo()
-    dates = with_values.aggregate_array("system:time_start").getInfo()
 
     valid_values = [v * 0.0001 for v in values if v is not None]
 

@@ -139,7 +139,6 @@ def create_scatter_plot(
 
 
 def create_error_by_year_plot(
-    df: pd.DataFrame,
     error_by_year: pd.DataFrame,
     output_path: Path | None = None,
 ) -> None:
@@ -385,7 +384,6 @@ def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
     )
 
     create_error_by_year_plot(
-        all_with_pred,
         error_by_year,
         output_path=RESULTS_PATH / "error_by_year.png",
     )

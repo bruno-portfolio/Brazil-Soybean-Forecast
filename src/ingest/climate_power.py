@@ -267,7 +267,7 @@ def fetch_climate_for_municipalities(
     failed = 0
     failed_list = []
 
-    for idx, row in pending.iterrows():
+    for _, row in pending.iterrows():
         cod_ibge = row["cod_ibge"]
         lat = row["lat"]
         lon = row["lon"]

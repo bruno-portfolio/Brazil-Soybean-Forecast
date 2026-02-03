@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 import pandas as pd
 
@@ -21,8 +20,8 @@ class CenarioFinanceiro:
 class AnaliseRisco:
     """Resultado da analise de risco para um municipio."""
 
-    cod_ibge: Optional[int]
-    municipio: Optional[str]
+    cod_ibge: int | None
+    municipio: str | None
     uf: str
     ano: int
 
@@ -42,7 +41,7 @@ class AnaliseRisco:
     custo_ha: float
 
     recomendacao: str
-    spread_sugerido: Optional[float]
+    spread_sugerido: float | None
 
 
 CUSTOS_POR_UF = {

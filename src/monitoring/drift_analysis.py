@@ -117,10 +117,7 @@ class DriftAnalyzer:
         if psi >= self.psi_threshold_significant:
             drift_level = "significant"
             drift_detected = True
-        elif psi >= self.psi_threshold_moderate:
-            drift_level = "moderate"
-            drift_detected = True
-        elif ks_pvalue < self.ks_pvalue_threshold:
+        elif psi >= self.psi_threshold_moderate or ks_pvalue < self.ks_pvalue_threshold:
             drift_level = "moderate"
             drift_detected = True
         else:
@@ -181,7 +178,6 @@ class DriftAnalyzer:
 
         feature_results.sort(key=lambda x: x.psi, reverse=True)
 
-        features_with_drift = [r for r in feature_results if r.drift_detected]
         significant_drift = [r for r in feature_results if r.drift_level == "significant"]
 
         overall_drift = len(significant_drift) > 0
@@ -361,7 +357,6 @@ def main():
 
     df_pred = df_test.dropna(subset=model_features + ["produtividade_kg_ha"]).copy()
     X_test = df_pred[model_features].values
-    y_test = df_pred["produtividade_kg_ha"].values
 
     y_pred = model.predict(X_test)
     df_pred["pred"] = y_pred

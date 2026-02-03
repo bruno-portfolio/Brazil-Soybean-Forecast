@@ -82,10 +82,7 @@ def calculate_shap_values(
     max_samples: int = 5000,
 ) -> tuple[shap.Explainer, np.ndarray, pd.DataFrame]:
     """Calcula SHAP values usando TreeExplainer."""
-    if len(X) > max_samples:
-        X_sample = X.sample(n=max_samples, random_state=42)
-    else:
-        X_sample = X.copy()
+    X_sample = X.sample(n=max_samples, random_state=42) if len(X) > max_samples else X.copy()
 
     explainer = shap.TreeExplainer(model)
 
@@ -271,7 +268,7 @@ def generate_explainability_report(
     total_gain = sum(gain_importance.values())
     total_shap = sum(shap_importance.values())
 
-    for feature in gain_importance.keys():
+    for feature in gain_importance:
         gain_pct = gain_importance[feature] / total_gain * 100
         perm = permutation_importance.get(feature, 0)
         shap_pct = shap_importance.get(feature, 0) / total_shap * 100
@@ -387,7 +384,6 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
     print("\nCarregando modelo...")
     model = load_model(model_version)
     metadata = load_model_metadata(model_version)
-    feature_names = metadata["feature_names"]
 
     print("Carregando dados...")
     split = create_temporal_split()

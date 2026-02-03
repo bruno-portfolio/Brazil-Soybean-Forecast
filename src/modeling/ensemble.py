@@ -178,11 +178,11 @@ class EnsembleModel:
         params = config.params.copy()
 
         if config.name == "lightgbm":
-            early_stopping = params.pop("early_stopping_rounds", None)
+            params.pop("early_stopping_rounds", None)
             return lgb.LGBMRegressor(**params)
 
         elif config.name == "xgboost":
-            early_stopping = params.pop("early_stopping_rounds", None)
+            params.pop("early_stopping_rounds", None)
             return xgb.XGBRegressor(**params)
 
         elif config.name == "catboost":

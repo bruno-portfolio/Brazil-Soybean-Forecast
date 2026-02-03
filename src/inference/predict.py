@@ -274,10 +274,7 @@ def calculate_precip_variability(df_group: pd.DataFrame) -> dict:
     precip = df_group["precip"].values
 
     mean_precip = precip.mean()
-    if mean_precip > 0:
-        cv = precip.std() / mean_precip
-    else:
-        cv = 0
+    cv = precip.std() / mean_precip if mean_precip > 0 else 0
 
     days_with_rain = (precip > 1.0).sum()
 
@@ -385,7 +382,7 @@ def add_enso_features(df: pd.DataFrame, df_enso: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_anomaly_features(df: pd.DataFrame, df_target: pd.DataFrame) -> pd.DataFrame:
+def add_anomaly_features(df: pd.DataFrame) -> pd.DataFrame:
     """Adiciona features de anomalia climatica para inferencia."""
     logger.info("Calculando features de anomalia...")
 
@@ -790,7 +787,7 @@ def main():
 
     df = calculate_historical_features(df, df_target, years_to_predict)
 
-    df = add_anomaly_features(df, df_target)
+    df = add_anomaly_features(df)
     df = add_regional_features(df)
 
     df = add_enso_interactions(df)

@@ -292,10 +292,7 @@ def filter_phenology_window_regional(
     for uf in ufs:
         df_uf = df[df["uf_cod"] == uf].copy()
 
-        if uf in regional_config:
-            config = regional_config[uf]
-        else:
-            config = default_config
+        config = regional_config.get(uf, default_config)
 
         start_month = config["start_month"]
         end_month = config["end_month"]
@@ -385,10 +382,7 @@ def calculate_precip_variability(df_group: pd.DataFrame) -> dict:
     precip = df_group["precip"].values
 
     mean_precip = precip.mean()
-    if mean_precip > 0:
-        cv = precip.std() / mean_precip
-    else:
-        cv = 0
+    cv = precip.std() / mean_precip if mean_precip > 0 else 0
 
     days_with_rain = (precip > 1.0).sum()
 

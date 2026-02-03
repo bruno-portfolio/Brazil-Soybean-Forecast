@@ -91,36 +91,6 @@ def download_coordinates_from_ibge_cidades() -> dict[int, tuple[float, float]]:
 
     logger.info("Baixando coordenadas das sedes municipais...")
 
-    ufs = [
-        "AC",
-        "AL",
-        "AP",
-        "AM",
-        "BA",
-        "CE",
-        "DF",
-        "ES",
-        "GO",
-        "MA",
-        "MT",
-        "MS",
-        "MG",
-        "PA",
-        "PB",
-        "PR",
-        "PE",
-        "PI",
-        "RJ",
-        "RN",
-        "RS",
-        "RO",
-        "RR",
-        "SC",
-        "SP",
-        "SE",
-        "TO",
-    ]
-
     uf_to_code = {
         "RO": 11,
         "AC": 12,
@@ -234,7 +204,7 @@ def main():
     logger.add(sys.stderr, level="INFO")
 
     try:
-        df = process_municipalities()
+        process_municipalities()
         logger.info("=== Ingestão concluída com sucesso ===")
         return 0
     except Exception as e:

@@ -81,7 +81,6 @@ def build_soilgrids_url(
 def parse_soilgrids_response(
     data: dict,
     cod_ibge: int,
-    config: dict,
 ) -> dict[str, Any] | None:
     """Parseia resposta da API SoilGrids."""
     if "properties" not in data or "layers" not in data["properties"]:
@@ -163,7 +162,7 @@ def download_soil_for_municipality(
             response.raise_for_status()
             data = response.json()
 
-            record = parse_soilgrids_response(data, cod_ibge, config)
+            record = parse_soilgrids_response(data, cod_ibge)
 
             if record is None or len(record) <= 1:
                 logger.warning(f"cod_ibge={cod_ibge}: resposta sem dados de solo")
@@ -331,7 +330,7 @@ def aggregate_depths(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     return df_agg
 
 
-def calculate_derived_features(df: pd.DataFrame, config: dict) -> pd.DataFrame:
+def calculate_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     """Calcula features derivadas de solo."""
     df = df.copy()
 
@@ -427,7 +426,7 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
     failed = 0
     failed_list = []
 
-    for idx, row in pending.iterrows():
+    for _, row in pending.iterrows():
         cod_ibge = row["cod_ibge"]
         lat = row["lat"]
         lon = row["lon"]
@@ -437,7 +436,7 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
         if record is not None:
             save_to_cache(record, cod_ibge)
             success += 1
-            n_props = len([k for k in record.keys() if k != "cod_ibge"])
+            n_props = len([k for k in record if k != "cod_ibge"])
             logger.info(
                 f"[{success + failed}/{len(pending)}] cod_ibge={cod_ibge}: OK ({n_props} propriedades)"
             )
@@ -465,7 +464,7 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
     df_agg = aggregate_depths(df_raw, config)
 
     logger.info("Calculando features derivadas...")
-    df_final = calculate_derived_features(df_agg, config)
+    df_final = calculate_derived_features(df_agg)
 
     df_final = df_final.sort_values("cod_ibge").reset_index(drop=True)
 
