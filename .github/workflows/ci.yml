@@ -70,5 +70,5 @@ jobs:
           python -c "import src; print(f'Package version: {src.__version__}')"
           python -c "from src.features.build_features import main; print('Features module OK')"
           python -c "from src.modeling.ensemble import RegionalEnsemble, EnsembleModel; print('Ensemble module OK')"
-          python -c "from src.ingest.climate_nasa import main; print('Climate ingest OK')"
+          python -c "from src.ingest.climate_power import main; print('Climate ingest OK')"
           echo "All imports successful!"
