@@ -3,14 +3,22 @@ import logging
 import numpy as np
 import pandas as pd
 
-from src.common.features import add_enso_interactions, add_regional_features
+from src.common.features import (
+    add_enso_features,
+    add_enso_interactions,
+    add_regional_features,
+    add_soil_climate_interactions,
+    add_soil_features,
+    calculate_climate_anomalies,
+)
 from src.common.io import PROJECT_ROOT, load_config
 from src.common.phenology import (
-    assign_crop_year,
-    assign_phenology_phase,
-    calculate_dry_spell_metrics,
+    aggregate_season_climate,
     calculate_gdd,
-    calculate_precip_variability,
+    filter_phenology_window,
+    filter_phenology_window_regional,
+    get_default_phenology,
+    get_regional_phenology,
 )
 
 logger = logging.getLogger(__name__)
@@ -179,129 +187,6 @@ def add_ndvi_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def get_regional_phenology(config: dict) -> dict:
-    """Carrega configuracao de janelas fenologicas regionais."""
-    regional = config.get("features", {}).get("regional_phenology", {})
-
-    result = {}
-    for uf_cod, params in regional.items():
-        result[int(uf_cod)] = params
-
-    return result
-
-
-def get_default_phenology(config: dict) -> dict:
-    """Retorna janela fenologica default."""
-    window = config.get("features", {}).get("phenology_window", {})
-    return {
-        "start_month": window.get("start_month", 10),
-        "end_month": window.get("end_month", 3),
-        "phases": {
-            "plantio": [10, 11],
-            "vegetativo": [12, 1],
-            "enchimento": [2, 3],
-        },
-    }
-
-
-def assign_phenology_phase_regional(date: pd.Timestamp, phases: dict) -> str:
-    """Atribui a fase fenologica para uma data usando configuracao regional."""
-    month = date.month
-
-    for phase_name, months in phases.items():
-        if month in months:
-            return phase_name
-
-    return None
-
-
-def filter_phenology_window(df: pd.DataFrame, start_month: int, end_month: int) -> pd.DataFrame:
-    """Filtra dados de clima para a janela fenologica default."""
-    df = df.copy()
-    df["month"] = df["date"].dt.month
-
-    if start_month > end_month:
-        mask = (df["month"] >= start_month) | (df["month"] <= end_month)
-    else:
-        mask = (df["month"] >= start_month) & (df["month"] <= end_month)
-
-    df_filtered = df[mask].copy()
-
-    df_filtered["crop_year"] = df_filtered["date"].apply(
-        lambda x: assign_crop_year(x, start_month, end_month)
-    )
-    df_filtered["phase"] = df_filtered["date"].apply(assign_phenology_phase)
-
-    logger.info(f"  Registros na janela: {len(df_filtered):,}")
-    return df_filtered
-
-
-def filter_phenology_window_regional(
-    df: pd.DataFrame,
-    regional_config: dict,
-    default_config: dict,
-) -> pd.DataFrame:
-    """Filtra dados de clima usando janelas fenologicas regionais."""
-    logger.info("Filtrando janela fenologica por regiao...")
-
-    df = df.copy()
-    df["month"] = df["date"].dt.month
-    df["uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
-
-    all_filtered = []
-
-    ufs = df["uf_cod"].unique()
-
-    for uf in ufs:
-        df_uf = df[df["uf_cod"] == uf].copy()
-
-        config = regional_config.get(uf, default_config)
-
-        start_month = config["start_month"]
-        end_month = config["end_month"]
-        phases = config.get(
-            "phases",
-            {
-                "plantio": [10, 11],
-                "vegetativo": [12, 1],
-                "enchimento": [2, 3],
-            },
-        )
-
-        if start_month > end_month:
-            mask = (df_uf["month"] >= start_month) | (df_uf["month"] <= end_month)
-        else:
-            mask = (df_uf["month"] >= start_month) & (df_uf["month"] <= end_month)
-
-        df_uf_filtered = df_uf[mask].copy()
-
-        if len(df_uf_filtered) == 0:
-            continue
-
-        df_uf_filtered["crop_year"] = df_uf_filtered["date"].apply(
-            lambda x, sm=start_month, em=end_month: assign_crop_year(x, sm, em)
-        )
-
-        df_uf_filtered["phase"] = df_uf_filtered["date"].apply(
-            lambda x, ph=phases: assign_phenology_phase_regional(x, ph)
-        )
-
-        all_filtered.append(df_uf_filtered)
-
-    df_result = pd.concat(all_filtered, ignore_index=True)
-
-    df_result = df_result.drop(columns=["uf_cod"])
-
-    logger.info(f"  Registros na janela regional: {len(df_result):,}")
-
-    for uf in sorted(regional_config.keys()):
-        if uf in regional_config:
-            cfg = regional_config[uf]
-            logger.info(f"    UF {uf}: meses {cfg['start_month']}-{cfg['end_month']}")
-
-    return df_result
-
-
 def calculate_water_balance_metrics(df_group: pd.DataFrame) -> dict:
     """Calcula metricas de balanco hidrico (ETo, deficit)."""
     result = {
@@ -390,41 +275,8 @@ def aggregate_climate_features_by_phase(
 
             df_season = df_mun[df_mun["crop_year"] == crop_year]
 
-            result = {
-                "cod_ibge": cod_ibge,
-                "ano": int(crop_year),
-            }
-
-            for phase in phases:
-                df_phase = df_season[df_season["phase"] == phase]
-
-                if len(df_phase) > 0:
-                    result[f"precip_{phase}_mm"] = df_phase["precip"].sum()
-                    result[f"tmean_{phase}"] = df_phase["tmean"].mean()
-                    result[f"tmin_{phase}"] = df_phase["tmin"].mean()
-                    result[f"tmax_{phase}"] = df_phase["tmax"].mean()
-                    result[f"hot_days_{phase}"] = df_phase["is_hot_day"].sum()
-                    result[f"gdd_{phase}"] = df_phase["gdd"].sum()
-                else:
-                    result[f"precip_{phase}_mm"] = 0
-                    result[f"tmean_{phase}"] = np.nan
-                    result[f"tmin_{phase}"] = np.nan
-                    result[f"tmax_{phase}"] = np.nan
-                    result[f"hot_days_{phase}"] = 0
-                    result[f"gdd_{phase}"] = 0
-
-            result["precip_total_mm"] = df_season["precip"].sum()
-            result["tmean_avg"] = df_season["tmean"].mean()
-            result["tmin_avg"] = df_season["tmin"].mean()
-            result["tmax_avg"] = df_season["tmax"].mean()
-            result["hot_days_count"] = df_season["is_hot_day"].sum()
-            result["gdd_accumulated"] = df_season["gdd"].sum()
-
-            dry_metrics = calculate_dry_spell_metrics(df_season)
-            result.update(dry_metrics)
-
-            var_metrics = calculate_precip_variability(df_season)
-            result.update(var_metrics)
+            result = {"cod_ibge": cod_ibge, "ano": int(crop_year)}
+            result.update(aggregate_season_climate(df_season, phases))
 
             wb_metrics = calculate_water_balance_metrics(df_season)
             result["eto_total_mm"] = wb_metrics["eto_total_mm"]
@@ -443,189 +295,6 @@ def aggregate_climate_features_by_phase(
     logger.info(f"  Registros agregados: {len(df_agg):,}")
 
     return df_agg
-
-
-def add_enso_features(df: pd.DataFrame, df_enso: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona features ENSO ao dataset."""
-    if df_enso is None:
-        logger.warning("Dados ENSO nao disponiveis. Pulando...")
-        return df
-
-    logger.info("Adicionando features ENSO...")
-
-    df = df.merge(df_enso, on="ano", how="left")
-
-    df["is_la_nina"] = (df["enso_phase"] == "nina").astype(int)
-    df["is_el_nino"] = (df["enso_phase"] == "nino").astype(int)
-
-    df = df.drop(columns=["enso_phase", "enso_intensity"], errors="ignore")
-
-    logger.info("  Features ENSO adicionadas")
-
-    return df
-
-
-def calculate_climate_anomalies(df: pd.DataFrame, min_years: int = 5) -> pd.DataFrame:
-    """Calcula features de anomalia climatica (desvios da normal historica)."""
-    logger.info("Calculando features de anomalia climatica...")
-
-    df = df.copy()
-    df = df.sort_values(["cod_ibge", "ano"])
-
-    anomaly_vars = [
-        ("precip_total_mm", "precip_anomaly"),
-        ("tmean_avg", "temp_anomaly"),
-        ("hot_days_count", "hot_days_anomaly"),
-        ("gdd_accumulated", "gdd_anomaly"),
-        ("precip_enchimento_mm", "precip_enchimento_anomaly"),
-        ("dry_spell_max", "dry_spell_anomaly"),
-    ]
-
-    for var_name, anomaly_name in anomaly_vars:
-        if var_name not in df.columns:
-            logger.warning(f"  Variavel {var_name} nao encontrada, pulando...")
-            continue
-
-        df[f"_mean_{var_name}"] = (
-            df.groupby("cod_ibge")[var_name]
-            .apply(lambda x: x.shift(1).expanding(min_periods=min_years).mean())
-            .reset_index(level=0, drop=True)
-        )
-
-        df[f"_std_{var_name}"] = (
-            df.groupby("cod_ibge")[var_name]
-            .apply(lambda x: x.shift(1).expanding(min_periods=min_years).std())
-            .reset_index(level=0, drop=True)
-        )
-
-        std_col = df[f"_std_{var_name}"]
-        std_col = std_col.replace(0, np.nan)
-
-        df[anomaly_name] = (df[var_name] - df[f"_mean_{var_name}"]) / std_col
-
-        df[anomaly_name] = df[anomaly_name].clip(-4, 4)
-
-        df = df.drop(columns=[f"_mean_{var_name}", f"_std_{var_name}"])
-
-        n_valid = df[anomaly_name].notna().sum()
-        if n_valid > 0:
-            logger.info(
-                f"  {anomaly_name}: range [{df[anomaly_name].min():.2f}, "
-                f"{df[anomaly_name].max():.2f}], {n_valid:,} valores validos"
-            )
-
-    logger.info("  Features de anomalia calculadas")
-
-    return df
-
-
-def add_soil_features(df: pd.DataFrame, df_soil: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona features de solo ao dataset."""
-    if df_soil is None:
-        logger.warning("Dados de solo nao disponiveis. Pulando...")
-        return df
-
-    logger.info("Adicionando features de solo...")
-
-    df = df.merge(df_soil, on="cod_ibge", how="left")
-
-    soil_cols = [c for c in df_soil.columns if c != "cod_ibge"]
-    if soil_cols:
-        n_with_soil = df[soil_cols[0]].notna().sum()
-        n_total = len(df)
-        logger.info(
-            f"  Registros com dados de solo: {n_with_soil:,} ({n_with_soil / n_total * 100:.1f}%)"
-        )
-
-    logger.info(f"  Features de solo adicionadas: {len(soil_cols)}")
-    for col in soil_cols[:5]:
-        if col in df.columns:
-            logger.info(f"    - {col}: mean={df[col].mean():.2f}, nulls={df[col].isna().sum()}")
-
-    return df
-
-
-def add_soil_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona interacoes entre features de solo e clima."""
-    logger.info("Adicionando interacoes solo x clima...")
-
-    df = df.copy()
-    interactions_added = 0
-
-    if "clay_0_30cm" in df.columns and "precip_anomaly" in df.columns:
-        clay_norm = df["clay_0_30cm"] / 100
-        df["clay_x_precip_deficit"] = clay_norm * (-df["precip_anomaly"].fillna(0))
-        interactions_added += 1
-        logger.info(
-            f"  clay_x_precip_deficit: range "
-            f"[{df['clay_x_precip_deficit'].min():.2f}, "
-            f"{df['clay_x_precip_deficit'].max():.2f}]"
-        )
-
-    if "awc_estimated" in df.columns and "dry_spell_max" in df.columns:
-        awc_norm = df["awc_estimated"] / df["awc_estimated"].max()
-        dry_norm = df["dry_spell_max"] / df["dry_spell_max"].std()
-        df["awc_x_dry_spell"] = (1 - awc_norm) * dry_norm
-        interactions_added += 1
-        logger.info(
-            f"  awc_x_dry_spell: range "
-            f"[{df['awc_x_dry_spell'].min():.2f}, "
-            f"{df['awc_x_dry_spell'].max():.2f}]"
-        )
-
-    if "sand_0_30cm" in df.columns and "dry_spell_max" in df.columns:
-        sand_norm = df["sand_0_30cm"] / 100
-        dry_norm = df["dry_spell_max"] / df["dry_spell_max"].std()
-        df["sand_x_drought"] = sand_norm * dry_norm
-        interactions_added += 1
-
-    if "phh2o_0_30cm" in df.columns and "is_sul" in df.columns:
-        is_cerrado = 1 - df["is_sul"]
-        ph_deficit = 6.0 - df["phh2o_0_30cm"].fillna(6.0)
-        df["ph_x_cerrado"] = ph_deficit.clip(lower=0) * is_cerrado
-        interactions_added += 1
-        logger.info(
-            f"  ph_x_cerrado: range "
-            f"[{df['ph_x_cerrado'].min():.2f}, "
-            f"{df['ph_x_cerrado'].max():.2f}]"
-        )
-
-    if "soc_0_30cm" in df.columns and "hot_days_anomaly" in df.columns:
-        soc_norm = df["soc_0_30cm"] / df["soc_0_30cm"].max()
-        df["soc_x_heat_stress"] = (1 - soc_norm) * df["hot_days_anomaly"].fillna(0)
-        interactions_added += 1
-
-    if "sand_0_30cm" in df.columns and "is_la_nina" in df.columns and "is_sul" in df.columns:
-        sand_norm = df["sand_0_30cm"] / 100
-        df["sand_x_la_nina_sul"] = sand_norm * df["is_la_nina"] * df["is_sul"]
-        interactions_added += 1
-        logger.info(f"  sand_x_la_nina_sul: {(df['sand_x_la_nina_sul'] > 0).sum():,} casos")
-
-    if "cec_0_30cm" in df.columns:
-        cec_norm = (df["cec_0_30cm"] - df["cec_0_30cm"].min()) / (
-            df["cec_0_30cm"].max() - df["cec_0_30cm"].min() + 0.001
-        )
-        df["cec_normalized"] = cec_norm
-        interactions_added += 1
-
-    if "awc_estimated" in df.columns and "water_deficit_mm" in df.columns:
-        awc_norm = df["awc_estimated"] / (df["awc_estimated"].max() + 1e-8)
-        deficit_norm = df["water_deficit_mm"] / (df["water_deficit_mm"].std() + 1e-8)
-        df["awc_x_deficit"] = (1 - awc_norm) * deficit_norm
-        interactions_added += 1
-        logger.info(
-            f"  awc_x_deficit: range [{df['awc_x_deficit'].min():.2f}, {df['awc_x_deficit'].max():.2f}]"
-        )
-
-    if "sand_0_30cm" in df.columns and "water_deficit_mm" in df.columns:
-        sand_norm = df["sand_0_30cm"] / 100
-        deficit_norm = df["water_deficit_mm"] / (df["water_deficit_mm"].std() + 1e-8)
-        df["sand_x_deficit"] = sand_norm * deficit_norm
-        interactions_added += 1
-
-    logger.info(f"  Total de interacoes solo x clima adicionadas: {interactions_added}")
-
-    return df
 
 
 def calculate_historical_features(df: pd.DataFrame) -> pd.DataFrame:

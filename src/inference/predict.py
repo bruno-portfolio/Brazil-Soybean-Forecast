@@ -8,14 +8,21 @@ import numpy as np
 import pandas as pd
 
 from src.common.constants import REGION_SUL
-from src.common.features import add_enso_interactions, add_regional_features
-from src.common.io import PROJECT_ROOT, load_municipalities
+from src.common.features import (
+    add_enso_features,
+    add_enso_interactions,
+    add_regional_features,
+    add_soil_climate_interactions,
+    add_soil_features,
+    calculate_climate_anomalies,
+)
+from src.common.io import PROJECT_ROOT, load_config, load_municipalities
 from src.common.phenology import (
-    assign_crop_year,
-    assign_phenology_phase,
-    calculate_dry_spell_metrics,
+    aggregate_season_climate,
     calculate_gdd,
-    calculate_precip_variability,
+    filter_phenology_window_regional,
+    get_default_phenology,
+    get_regional_phenology,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +35,7 @@ ENSO_PATH = PROJECT_ROOT / "data" / "processed" / "oni_enso.parquet"
 OUTPUT_PATH = PROJECT_ROOT / "results" / "predictions_2024_2025.parquet"
 OUTPUT_JSON_PATH = PROJECT_ROOT / "results" / "predictions_metadata.json"
 
+SOIL_PATH = PROJECT_ROOT / "data" / "processed" / "soil_properties.parquet"
 MODEL_SUL_PATH = PROJECT_ROOT / "models" / "model_sul.pkl"
 MODEL_CERRADO_PATH = PROJECT_ROOT / "models" / "model_cerrado.pkl"
 REGIONAL_METADATA_PATH = PROJECT_ROOT / "results" / "regional_training_result.json"
@@ -203,25 +211,17 @@ def prepare_climate_features(
 ) -> pd.DataFrame:
     """Prepara features climaticas para os anos especificados.
 
-    NOTA: Gera features para o modelo regional (54 features, sem solo/water balance).
-    Para retreinar com feature set completo (79 features), adicionar:
-    - calculate_water_balance_metrics / calculate_water_balance_by_phase
-    - As features la_nina_x_deficit e terminal_drought_stress ja estao na versao
-      centralizada de add_enso_interactions (src.common.features) e serao geradas
-      automaticamente quando water_deficit_mm existir no DataFrame.
-    Ver: src/features/build_features.py::aggregate_climate_features_by_phase
+    Usa janelas fenologicas regionais de configs/features.yaml (ex: MT comeca em Set).
     """
     logger.info(f"Preparando features climaticas para anos: {years}")
 
     df = df_climate[df_climate["cod_ibge"].isin(municipalities)].copy()
 
-    df["month"] = df["date"].dt.month
+    features_config = load_config("features")
+    regional_pheno = get_regional_phenology(features_config)
+    default_pheno = get_default_phenology(features_config)
 
-    mask = (df["month"] >= 10) | (df["month"] <= 3)
-    df = df[mask].copy()
-
-    df["crop_year"] = df["date"].apply(assign_crop_year)
-    df["phase"] = df["date"].apply(assign_phenology_phase)
+    df = filter_phenology_window_regional(df, regional_pheno, default_pheno)
 
     df = df[df["crop_year"].isin(years)]
 
@@ -230,7 +230,6 @@ def prepare_climate_features(
 
     logger.info(f"  Registros de clima filtrados: {len(df):,}")
 
-    phases = ["plantio", "vegetativo", "enchimento"]
     all_results = []
 
     for cod_ibge in df["cod_ibge"].unique():
@@ -242,41 +241,8 @@ def prepare_climate_features(
 
             df_season = df_mun[df_mun["crop_year"] == crop_year]
 
-            result = {
-                "cod_ibge": cod_ibge,
-                "ano": int(crop_year),
-            }
-
-            for phase in phases:
-                df_phase = df_season[df_season["phase"] == phase]
-
-                if len(df_phase) > 0:
-                    result[f"precip_{phase}_mm"] = df_phase["precip"].sum()
-                    result[f"tmean_{phase}"] = df_phase["tmean"].mean()
-                    result[f"tmin_{phase}"] = df_phase["tmin"].mean()
-                    result[f"tmax_{phase}"] = df_phase["tmax"].mean()
-                    result[f"hot_days_{phase}"] = df_phase["is_hot_day"].sum()
-                    result[f"gdd_{phase}"] = df_phase["gdd"].sum()
-                else:
-                    result[f"precip_{phase}_mm"] = 0
-                    result[f"tmean_{phase}"] = np.nan
-                    result[f"tmin_{phase}"] = np.nan
-                    result[f"tmax_{phase}"] = np.nan
-                    result[f"hot_days_{phase}"] = 0
-                    result[f"gdd_{phase}"] = 0
-
-            result["precip_total_mm"] = df_season["precip"].sum()
-            result["tmean_avg"] = df_season["tmean"].mean()
-            result["tmin_avg"] = df_season["tmin"].mean()
-            result["tmax_avg"] = df_season["tmax"].mean()
-            result["hot_days_count"] = df_season["is_hot_day"].sum()
-            result["gdd_accumulated"] = df_season["gdd"].sum()
-
-            dry_metrics = calculate_dry_spell_metrics(df_season)
-            result.update(dry_metrics)
-
-            var_metrics = calculate_precip_variability(df_season)
-            result.update(var_metrics)
+            result = {"cod_ibge": cod_ibge, "ano": int(crop_year)}
+            result.update(aggregate_season_climate(df_season))
 
             all_results.append(result)
 
@@ -286,43 +252,26 @@ def prepare_climate_features(
     return df_agg
 
 
-def add_enso_features(df: pd.DataFrame, df_enso: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona features ENSO ao dataset."""
-    logger.info("Adicionando features ENSO...")
-
-    enso_cols = ["ano", "oni_avg", "oni_min", "oni_max", "oni_std"]
-    df_enso_num = df_enso[enso_cols].copy()
-
-    df_enso_num["is_la_nina"] = (df_enso["enso_phase"] == "nina").astype(int)
-    df_enso_num["is_el_nino"] = (df_enso["enso_phase"] == "nino").astype(int)
-
-    df = df.merge(df_enso_num, on="ano", how="left")
-
-    return df
+ANOMALY_COLS = [
+    "precip_anomaly",
+    "temp_anomaly",
+    "hot_days_anomaly",
+    "gdd_anomaly",
+    "precip_enchimento_anomaly",
+    "dry_spell_anomaly",
+]
 
 
-def add_anomaly_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona features de anomalia climatica para inferencia."""
-    logger.info("Calculando features de anomalia...")
-
-    df = df.copy()
-
-    anomaly_cols = [
-        "precip_anomaly",
-        "temp_anomaly",
-        "hot_days_anomaly",
-        "gdd_anomaly",
-        "precip_enchimento_anomaly",
-        "dry_spell_anomaly",
-    ]
-
-    for col in anomaly_cols:
-        if col not in df.columns:
+def _fill_missing_anomalies(df: pd.DataFrame) -> None:
+    """Preenche anomalias faltantes com 0.0 (municipios sem historico suficiente)."""
+    for col in ANOMALY_COLS:
+        if col in df.columns:
+            df[col] = df[col].fillna(0.0)
+        else:
             df[col] = 0.0
 
-    logger.info("  Features de anomalia adicionadas (assumindo valores normais)")
-
-    return df
+    n_nonzero = sum((df[col] != 0.0).sum() for col in ANOMALY_COLS)
+    logger.info(f"  Anomalias: {n_nonzero:,} valores nao-zero")
 
 
 def calculate_historical_features(
@@ -632,18 +581,33 @@ def main():
 
     municipalities = get_soy_producing_municipalities(df_target, min_years=3)
 
-    df = prepare_climate_features(
-        df_climate, municipalities, years_to_predict, base_temp=10.0, hot_threshold=32.0
+    hist_start = min(years_to_predict) - 6
+    all_years = list(range(hist_start, min(years_to_predict))) + years_to_predict
+    df_all = prepare_climate_features(
+        df_climate, municipalities, all_years, base_temp=10.0, hot_threshold=32.0
     )
 
-    df = add_enso_features(df, df_enso)
+    df_all = add_enso_features(df_all, df_enso)
+
+    df_all = calculate_climate_anomalies(df_all, min_years=5)
+
+    df = df_all[df_all["ano"].isin(years_to_predict)].copy()
 
     df = calculate_historical_features(df, df_target, years_to_predict)
 
-    df = add_anomaly_features(df)
+    _fill_missing_anomalies(df)
     df = add_regional_features(df)
 
     df = add_enso_interactions(df)
+
+    if not use_regional:
+        if SOIL_PATH.exists():
+            logger.info("Carregando dados de solo para modelo v1...")
+            df_soil = pd.read_parquet(SOIL_PATH)
+            df = add_soil_features(df, df_soil)
+            df = add_soil_climate_interactions(df)
+        else:
+            logger.warning("soil_properties.parquet nao encontrado, solo nao sera adicionado")
 
     if use_regional:
         df = generate_predictions_regional(
