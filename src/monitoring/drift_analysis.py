@@ -5,7 +5,13 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from src.common.io import PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
+
+DATASET_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final.parquet"
+MODEL_PATH = PROJECT_ROOT / "models" / "model_v1.pkl"
+RESULTS_PATH = PROJECT_ROOT / "results"
 
 
 @dataclass
@@ -314,12 +320,6 @@ def main():
     """Executa analise de drift nos dados do modelo."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     import pickle
-    from pathlib import Path
-
-    PROJECT_ROOT = Path(__file__).parent.parent.parent
-    DATASET_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final.parquet"
-    MODEL_PATH = PROJECT_ROOT / "models" / "model_v1.pkl"
-    RESULTS_PATH = PROJECT_ROOT / "results"
 
     logger.info("=" * 70)
     logger.info("ANALISE DE DRIFT DO MODELO")

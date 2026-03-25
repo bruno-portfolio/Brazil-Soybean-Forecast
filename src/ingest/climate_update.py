@@ -13,7 +13,6 @@ from src.common.io import (
     load_target_municipalities,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "climate"
@@ -175,6 +174,7 @@ def merge_climate_data():
 
 def main():
     """Pipeline principal."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     update_climate_cache()
     merge_climate_data()
 

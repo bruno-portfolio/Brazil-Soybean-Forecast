@@ -13,10 +13,6 @@ from src.common.io import (
     load_target_municipalities,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "soil"
@@ -330,6 +326,7 @@ def calculate_statistics(df: pd.DataFrame) -> dict:
 
 def main(only_soy_producers: bool = True, max_municipalities: int | None = None):
     """Pipeline principal de ingestao de dados de solo."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("INGESTAO SOLO - SOILGRIDS")
     logger.info("=" * 60)

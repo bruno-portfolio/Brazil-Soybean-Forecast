@@ -5,7 +5,6 @@ import logging
 import pickle
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -15,10 +14,10 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from src.common.io import PROJECT_ROOT
 from src.evaluation.metrics import compute_all_metrics
 from src.modeling.split import create_temporal_split, get_feature_columns
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "configs" / "model.yaml"
 MODELS_PATH = PROJECT_ROOT / "models"
 RESULTS_PATH = PROJECT_ROOT / "results"

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from src.common.constants import REGION_SUL
+from src.common.features import add_enso_interactions, add_regional_features
 from src.common.io import PROJECT_ROOT, load_municipalities
 from src.common.phenology import (
     assign_crop_year,
@@ -17,10 +18,6 @@ from src.common.phenology import (
     calculate_precip_variability,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = PROJECT_ROOT / "models" / "model_v1.pkl"
@@ -204,7 +201,16 @@ def prepare_climate_features(
     base_temp: float = 10.0,
     hot_threshold: float = 32.0,
 ) -> pd.DataFrame:
-    """Prepara features climaticas para os anos especificados."""
+    """Prepara features climaticas para os anos especificados.
+
+    NOTA: Gera features para o modelo regional (54 features, sem solo/water balance).
+    Para retreinar com feature set completo (79 features), adicionar:
+    - calculate_water_balance_metrics / calculate_water_balance_by_phase
+    - As features la_nina_x_deficit e terminal_drought_stress ja estao na versao
+      centralizada de add_enso_interactions (src.common.features) e serao geradas
+      automaticamente quando water_deficit_mm existir no DataFrame.
+    Ver: src/features/build_features.py::aggregate_climate_features_by_phase
+    """
     logger.info(f"Preparando features climaticas para anos: {years}")
 
     df = df_climate[df_climate["cod_ibge"].isin(municipalities)].copy()
@@ -315,33 +321,6 @@ def add_anomaly_features(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = 0.0
 
     logger.info("  Features de anomalia adicionadas (assumindo valores normais)")
-
-    return df
-
-
-def add_regional_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona features de tratamento regional para o Sul do Brasil."""
-    logger.info("Adicionando features regionais...")
-
-    df = df.copy()
-
-    df["uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
-
-    df["is_sul"] = df["uf_cod"].isin(REGION_SUL).astype(int)
-
-    if "is_la_nina" in df.columns:
-        df["sul_x_la_nina"] = df["is_sul"] * df["is_la_nina"]
-
-    if "precip_anomaly" in df.columns:
-        df["sul_x_precip_anomaly"] = df["is_sul"] * df["precip_anomaly"].fillna(0)
-
-    if "hot_days_anomaly" in df.columns:
-        df["sul_x_hot_days_anomaly"] = df["is_sul"] * df["hot_days_anomaly"].fillna(0)
-
-    df = df.drop(columns=["uf_cod"])
-
-    n_sul = df["is_sul"].sum()
-    logger.info(f"  Registros do Sul: {n_sul:,} ({n_sul / len(df) * 100:.1f}%)")
 
     return df
 
@@ -613,46 +592,9 @@ def save_predictions(df: pd.DataFrame, model_metadata: dict, years: list) -> Non
     logger.info(f"  Metadados salvos em: {OUTPUT_JSON_PATH}")
 
 
-def add_enso_interactions(df: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona interacoes ENSO para inferencia (Fase 3)."""
-    df = df.copy()
-
-    if "is_la_nina" in df.columns and "precip_enchimento_anomaly" in df.columns:
-        df["la_nina_x_precip_ench_anom"] = df["is_la_nina"] * df[
-            "precip_enchimento_anomaly"
-        ].fillna(0)
-
-    if "dry_spell_max" in df.columns and "hot_days_anomaly" in df.columns:
-        dry_spell_norm = (
-            df["dry_spell_max"] / df["dry_spell_max"].std()
-            if df["dry_spell_max"].std() > 0
-            else df["dry_spell_max"]
-        )
-        df["dry_spell_x_hot_anom"] = dry_spell_norm * df["hot_days_anomaly"].fillna(0)
-
-    if "is_la_nina" in df.columns and "precip_anomaly" in df.columns:
-        df["la_nina_x_precip_anom"] = df["is_la_nina"] * df["precip_anomaly"].fillna(0)
-
-    if "temp_anomaly" in df.columns and "precip_anomaly" in df.columns:
-        df["heat_drought_stress"] = df["temp_anomaly"].fillna(0) * (-df["precip_anomaly"].fillna(0))
-
-    if "hot_days_enchimento" in df.columns and "precip_enchimento_mm" in df.columns:
-        precip_ench_mean = df["precip_enchimento_mm"].mean()
-        if precip_ench_mean > 0:
-            precip_ench_ratio = df["precip_enchimento_mm"] / precip_ench_mean
-            precip_deficit = 1 - precip_ench_ratio.clip(0, 2)
-            df["enchimento_stress"] = df["hot_days_enchimento"] * precip_deficit
-        else:
-            df["enchimento_stress"] = 0
-
-    if "is_el_nino" in df.columns and "precip_anomaly" in df.columns:
-        df["el_nino_x_precip_anom"] = df["is_el_nino"] * df["precip_anomaly"].fillna(0)
-
-    return df
-
-
 def main():
     """Pipeline principal de inferencia."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 70)
     logger.info("INFERENCIA DE PRODUTIVIDADE DE SOJA 2024-2025")
     logger.info("Modalidade: Ex-post (clima observado)")

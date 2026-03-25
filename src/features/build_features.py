@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from src.common.constants import REGION_SUL
+from src.common.features import add_enso_interactions, add_regional_features
 from src.common.io import PROJECT_ROOT, load_config
 from src.common.phenology import (
     assign_crop_year,
@@ -13,10 +13,6 @@ from src.common.phenology import (
     calculate_precip_variability,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
 CLIMATE_V2_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily_v2.parquet"
@@ -368,7 +364,12 @@ def calculate_water_balance_by_phase(df_season: pd.DataFrame, phases: list[str])
 def aggregate_climate_features_by_phase(
     df: pd.DataFrame, base_temp: float = 10.0, hot_threshold: float = 32.0
 ) -> pd.DataFrame:
-    """Agrega features climaticas por fase fenologica."""
+    """Agrega features climaticas por fase fenologica.
+
+    Versao completa com water balance. predict.py usa prepare_climate_features
+    que nao inclui water balance. Ao unificar, mover water balance functions
+    para src/common.
+    """
     logger.info("Agregando features climaticas por fase fenologica...")
 
     df = df.copy()
@@ -514,108 +515,6 @@ def calculate_climate_anomalies(df: pd.DataFrame, min_years: int = 5) -> pd.Data
             )
 
     logger.info("  Features de anomalia calculadas")
-
-    return df
-
-
-def add_enso_interactions(df: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona interacoes nao-lineares com ENSO para capturar eventos extremos."""
-    logger.info("Adicionando interacoes nao-lineares ENSO...")
-
-    df = df.copy()
-
-    if "is_la_nina" in df.columns and "precip_enchimento_anomaly" in df.columns:
-        df["la_nina_x_precip_ench_anom"] = df["is_la_nina"] * df[
-            "precip_enchimento_anomaly"
-        ].fillna(0)
-        logger.info(
-            f"  la_nina_x_precip_ench_anom: range "
-            f"[{df['la_nina_x_precip_ench_anom'].min():.2f}, "
-            f"{df['la_nina_x_precip_ench_anom'].max():.2f}]"
-        )
-
-    if "dry_spell_max" in df.columns and "hot_days_anomaly" in df.columns:
-        dry_spell_norm = df["dry_spell_max"] / df["dry_spell_max"].std()
-        df["dry_spell_x_hot_anom"] = dry_spell_norm * df["hot_days_anomaly"].fillna(0)
-        logger.info(
-            f"  dry_spell_x_hot_anom: range "
-            f"[{df['dry_spell_x_hot_anom'].min():.2f}, "
-            f"{df['dry_spell_x_hot_anom'].max():.2f}]"
-        )
-
-    if "is_la_nina" in df.columns and "precip_anomaly" in df.columns:
-        df["la_nina_x_precip_anom"] = df["is_la_nina"] * df["precip_anomaly"].fillna(0)
-
-    if "temp_anomaly" in df.columns and "precip_anomaly" in df.columns:
-        df["heat_drought_stress"] = df["temp_anomaly"].fillna(0) * (-df["precip_anomaly"].fillna(0))
-        logger.info(
-            f"  heat_drought_stress: range "
-            f"[{df['heat_drought_stress'].min():.2f}, "
-            f"{df['heat_drought_stress'].max():.2f}]"
-        )
-
-    if "hot_days_enchimento" in df.columns and "precip_enchimento_mm" in df.columns:
-        precip_ench_mean = df["precip_enchimento_mm"].mean()
-        precip_ench_ratio = df["precip_enchimento_mm"] / precip_ench_mean
-        precip_deficit = 1 - precip_ench_ratio.clip(0, 2)
-        df["enchimento_stress"] = df["hot_days_enchimento"] * precip_deficit
-        logger.info(
-            f"  enchimento_stress: range "
-            f"[{df['enchimento_stress'].min():.2f}, "
-            f"{df['enchimento_stress'].max():.2f}]"
-        )
-
-    if "is_el_nino" in df.columns and "precip_anomaly" in df.columns:
-        df["el_nino_x_precip_anom"] = df["is_el_nino"] * df["precip_anomaly"].fillna(0)
-
-    if "water_deficit_mm" in df.columns and "is_la_nina" in df.columns:
-        deficit_norm = df["water_deficit_mm"] / (df["water_deficit_mm"].std() + 1e-8)
-        df["la_nina_x_deficit"] = df["is_la_nina"] * deficit_norm
-        logger.info(
-            f"  la_nina_x_deficit: range [{df['la_nina_x_deficit'].min():.2f}, {df['la_nina_x_deficit'].max():.2f}]"
-        )
-
-    if "deficit_enchimento_mm" in df.columns and "hot_days_enchimento" in df.columns:
-        deficit_ench_norm = df["deficit_enchimento_mm"] / (df["deficit_enchimento_mm"].std() + 1e-8)
-        hot_ench_norm = df["hot_days_enchimento"] / (df["hot_days_enchimento"].std() + 1e-8)
-        df["terminal_drought_stress"] = deficit_ench_norm * hot_ench_norm
-        logger.info(
-            f"  terminal_drought_stress: range [{df['terminal_drought_stress'].min():.2f}, {df['terminal_drought_stress'].max():.2f}]"
-        )
-
-    logger.info("  Interacoes ENSO adicionadas")
-
-    return df
-
-
-def add_regional_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona features de tratamento regional para o Sul do Brasil."""
-    logger.info("Adicionando features de tratamento regional...")
-
-    df = df.copy()
-
-    df["uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
-
-    df["is_sul"] = df["uf_cod"].isin(REGION_SUL).astype(int)
-
-    if "is_la_nina" in df.columns:
-        df["sul_x_la_nina"] = df["is_sul"] * df["is_la_nina"]
-        logger.info(f"  sul_x_la_nina: {df['sul_x_la_nina'].sum():,} casos")
-
-    if "precip_anomaly" in df.columns:
-        df["sul_x_precip_anomaly"] = df["is_sul"] * df["precip_anomaly"].fillna(0)
-        logger.info(
-            f"  sul_x_precip_anomaly: range [{df['sul_x_precip_anomaly'].min():.2f}, "
-            f"{df['sul_x_precip_anomaly'].max():.2f}]"
-        )
-
-    if "hot_days_anomaly" in df.columns:
-        df["sul_x_hot_days_anomaly"] = df["is_sul"] * df["hot_days_anomaly"].fillna(0)
-
-    df = df.drop(columns=["uf_cod"])
-
-    n_sul = df["is_sul"].sum()
-    logger.info(f"  Registros do Sul: {n_sul:,} ({n_sul / len(df) * 100:.1f}%)")
 
     return df
 
@@ -817,6 +716,7 @@ def calculate_statistics(df: pd.DataFrame) -> dict:
 
 def main():
     """Pipeline principal de feature engineering."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("FEATURE ENGINEERING v2.0 (com Fase 1 de melhorias)")
     logger.info("=" * 60)

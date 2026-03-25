@@ -7,10 +7,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from src.common.io import PROJECT_ROOT
 from src.evaluation.metrics import compute_all_metrics
 from src.modeling.split import TemporalSplit, create_temporal_split
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 RESULTS_PATH = PROJECT_ROOT / "results"
 
 

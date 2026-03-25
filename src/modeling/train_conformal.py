@@ -5,7 +5,6 @@ import logging
 import pickle
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +12,9 @@ import numpy as np
 import pandas as pd
 
 from src.common.constants import REGION_SUL
+from src.common.io import PROJECT_ROOT
 from src.modeling.split import create_temporal_split, get_feature_columns
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 MODELS_PATH = PROJECT_ROOT / "models"
 RESULTS_PATH = PROJECT_ROOT / "results"
 

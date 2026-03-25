@@ -1,11 +1,15 @@
+import logging
 from pathlib import Path
 from typing import NamedTuple
 
 import pandas as pd
 import pandera as pa
 import yaml
-from loguru import logger
 from pandera import Check, Column, DataFrameSchema
+
+from src.common.io import PROJECT_ROOT
+
+logger = logging.getLogger(__name__)
 
 
 class ValidationResult(NamedTuple):
@@ -19,7 +23,7 @@ class ValidationResult(NamedTuple):
 def load_config(config_path: Path | None = None) -> dict:
     """Carrega configuracao geografica do arquivo YAML."""
     if config_path is None:
-        config_path = Path(__file__).parents[2] / "configs" / "geo.yaml"
+        config_path = PROJECT_ROOT / "configs" / "geo.yaml"
 
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -226,10 +230,7 @@ def validate_no_nulls(df: pd.DataFrame) -> ValidationResult:
 
 def validate_cod_ibge_format(df: pd.DataFrame) -> ValidationResult:
     """Valida formato do codigo IBGE (7 digitos, comeca com codigo da UF)."""
-    invalid = df[
-        (df["cod_ibge"] < 1100000)
-        | (df["cod_ibge"] > 5399999)
-    ]
+    invalid = df[(df["cod_ibge"] < 1100000) | (df["cod_ibge"] > 5399999)]
 
     if len(invalid) == 0:
         return ValidationResult(
@@ -306,12 +307,9 @@ def validate_municipalities_with_pandera(
 
 def main():
     """Valida arquivo de municipios existente."""
-    import sys
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-    logger.remove()
-    logger.add(sys.stderr, level="INFO")
-
-    parquet_path = Path(__file__).parents[2] / "data" / "processed" / "municipalities.parquet"
+    parquet_path = PROJECT_ROOT / "data" / "processed" / "municipalities.parquet"
 
     if not parquet_path.exists():
         logger.error(f"Arquivo nao encontrado: {parquet_path}")

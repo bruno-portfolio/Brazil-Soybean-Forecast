@@ -11,11 +11,11 @@ import numpy as np
 import pandas as pd
 import shap
 
+from src.common.io import PROJECT_ROOT
 from src.modeling.split import create_temporal_split, get_feature_columns
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 MODELS_PATH = PROJECT_ROOT / "models"
 RESULTS_PATH = PROJECT_ROOT / "results"
 DATA_PATH = PROJECT_ROOT / "data" / "processed"

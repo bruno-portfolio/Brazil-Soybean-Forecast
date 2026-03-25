@@ -6,10 +6,6 @@ import requests
 
 from src.common.io import PROJECT_ROOT, load_config
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
@@ -218,6 +214,7 @@ def calculate_statistics(df: pd.DataFrame) -> dict:
 
 def main():
     """Pipeline principal de ingestao da PAM."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("INGESTAO PAM - PRODUTIVIDADE DE SOJA")
     logger.info("=" * 60)

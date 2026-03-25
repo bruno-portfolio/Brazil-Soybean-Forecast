@@ -6,7 +6,6 @@ import pandas as pd
 from src.common.io import PROJECT_ROOT, load_config
 from src.common.phenology import assign_crop_year
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "ndvi_safra.parquet"
@@ -86,6 +85,7 @@ def aggregate_ndvi_by_safra(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 def main(input_file: str = None):
     """Pipeline principal."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("PROCESSAMENTO NDVI - AppEEARS")
     logger.info("=" * 60)

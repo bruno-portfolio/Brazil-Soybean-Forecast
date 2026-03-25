@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -11,9 +10,10 @@ import yaml
 if TYPE_CHECKING:
     pass
 
+from src.common.io import PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "configs" / "split.yaml"
 DATA_PATH = PROJECT_ROOT / "data" / "processed"
 

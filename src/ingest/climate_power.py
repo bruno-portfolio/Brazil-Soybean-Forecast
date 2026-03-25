@@ -14,10 +14,6 @@ from src.common.io import (
     load_target_municipalities,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "climate"
@@ -251,6 +247,7 @@ def fetch_climate_for_municipalities(
 
 def main(only_soy_producers: bool = True, max_municipalities: int | None = None):
     """Pipeline principal de ingestao de clima."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     return fetch_climate_for_municipalities(only_soy_producers, max_municipalities)
 
 

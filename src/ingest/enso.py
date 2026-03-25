@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
 
 import pandas as pd
 import requests
 
+from src.common.io import PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "data" / "processed"
 
 ONI_URL = "https://origin.cpc.ncep.noaa.gov/products/analysis_monitoring/ensostuff/detrend.nino34.ascii.txt"

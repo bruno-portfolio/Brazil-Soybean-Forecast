@@ -8,29 +8,31 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import cross_val_predict
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+from src.common.io import PROJECT_ROOT
+
 DATASET_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final.parquet"
 MODELS_DIR = PROJECT_ROOT / "models"
 
 try:
     import lightgbm as lgb
+
     LIGHTGBM_AVAILABLE = True
 except ImportError:
     LIGHTGBM_AVAILABLE = False
 
 try:
     import xgboost as xgb
+
     XGBOOST_AVAILABLE = True
 except ImportError:
     XGBOOST_AVAILABLE = False
 
 try:
     from catboost import CatBoostRegressor
+
     CATBOOST_AVAILABLE = True
 except ImportError:
     CATBOOST_AVAILABLE = False
@@ -39,6 +41,7 @@ except ImportError:
 @dataclass
 class ModelConfig:
     """Configuracao de um modelo."""
+
     name: str
     weight: float
     params: dict[str, Any]
@@ -61,13 +64,15 @@ def get_lightgbm_params(region: str = "all") -> dict:
     }
 
     if region == "sul":
-        base_params.update({
-            "num_leaves": 20,
-            "learning_rate": 0.03,
-            "min_child_samples": 30,
-            "reg_alpha": 0.1,
-            "reg_lambda": 0.1,
-        })
+        base_params.update(
+            {
+                "num_leaves": 20,
+                "learning_rate": 0.03,
+                "min_child_samples": 30,
+                "reg_alpha": 0.1,
+                "reg_lambda": 0.1,
+            }
+        )
 
     return base_params
 
@@ -87,13 +92,15 @@ def get_xgboost_params(region: str = "all") -> dict:
     }
 
     if region == "sul":
-        base_params.update({
-            "max_depth": 4,
-            "learning_rate": 0.03,
-            "min_child_weight": 5,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
-        })
+        base_params.update(
+            {
+                "max_depth": 4,
+                "learning_rate": 0.03,
+                "min_child_weight": 5,
+                "reg_alpha": 0.1,
+                "reg_lambda": 1.0,
+            }
+        )
 
     return base_params
 
@@ -113,11 +120,13 @@ def get_catboost_params(region: str = "all") -> dict:
     }
 
     if region == "sul":
-        base_params.update({
-            "depth": 4,
-            "learning_rate": 0.03,
-            "l2_leaf_reg": 5,
-        })
+        base_params.update(
+            {
+                "depth": 4,
+                "learning_rate": 0.03,
+                "l2_leaf_reg": 5,
+            }
+        )
 
     return base_params
 
@@ -144,25 +153,13 @@ class EnsembleModel:
         models = []
 
         if LIGHTGBM_AVAILABLE:
-            models.append(ModelConfig(
-                name="lightgbm",
-                weight=0.4,
-                params=get_lightgbm_params()
-            ))
+            models.append(ModelConfig(name="lightgbm", weight=0.4, params=get_lightgbm_params()))
 
         if XGBOOST_AVAILABLE:
-            models.append(ModelConfig(
-                name="xgboost",
-                weight=0.35,
-                params=get_xgboost_params()
-            ))
+            models.append(ModelConfig(name="xgboost", weight=0.35, params=get_xgboost_params()))
 
         if CATBOOST_AVAILABLE:
-            models.append(ModelConfig(
-                name="catboost",
-                weight=0.25,
-                params=get_catboost_params()
-            ))
+            models.append(ModelConfig(name="catboost", weight=0.25, params=get_catboost_params()))
 
         if not models:
             raise RuntimeError("Nenhum modelo disponivel. Instale lightgbm, xgboost ou catboost.")
@@ -196,7 +193,7 @@ class EnsembleModel:
         X_train: pd.DataFrame,
         y_train: pd.Series,
         X_val: pd.DataFrame | None = None,
-        y_val: pd.Series | None = None
+        y_val: pd.Series | None = None,
     ) -> EnsembleModel:
         """Treina todos os modelos do ensemble."""
         logger.info(f"Treinando ensemble com {len(self.model_configs)} modelos...")
@@ -209,22 +206,15 @@ class EnsembleModel:
             if X_val is not None and y_val is not None:
                 if config.name == "lightgbm":
                     model.fit(
-                        X_train, y_train,
+                        X_train,
+                        y_train,
                         eval_set=[(X_val, y_val)],
-                        callbacks=[lgb.early_stopping(50, verbose=False)]
+                        callbacks=[lgb.early_stopping(50, verbose=False)],
                     )
                 elif config.name == "xgboost":
-                    model.fit(
-                        X_train, y_train,
-                        eval_set=[(X_val, y_val)],
-                        verbose=False
-                    )
+                    model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
                 elif config.name == "catboost":
-                    model.fit(
-                        X_train, y_train,
-                        eval_set=(X_val, y_val),
-                        verbose=False
-                    )
+                    model.fit(X_train, y_train, eval_set=(X_val, y_val), verbose=False)
             else:
                 model.fit(X_train, y_train)
 
@@ -249,10 +239,7 @@ class EnsembleModel:
 
     def predict_individual(self, X: pd.DataFrame) -> dict[str, np.ndarray]:
         """Retorna predicoes individuais de cada modelo."""
-        return {
-            name: model.predict(X)
-            for name, model in self.fitted_models.items()
-        }
+        return {name: model.predict(X) for name, model in self.fitted_models.items()}
 
     def get_feature_importance(self, feature_names: list[str]) -> pd.DataFrame:
         """Retorna importancia agregada das features."""
@@ -268,10 +255,7 @@ class EnsembleModel:
             else:
                 continue
 
-            df_imp = pd.DataFrame({
-                "feature": feature_names,
-                f"importance_{name}": imp * weight
-            })
+            df_imp = pd.DataFrame({"feature": feature_names, f"importance_{name}": imp * weight})
             importance_dfs.append(df_imp)
 
         if not importance_dfs:
@@ -295,10 +279,7 @@ class EnsembleModel:
             model_path = path / f"{name}.pkl"
             joblib.dump(model, model_path)
 
-        meta = {
-            "weights": self.weights,
-            "model_names": list(self.fitted_models.keys())
-        }
+        meta = {"weights": self.weights, "model_names": list(self.fitted_models.keys())}
         joblib.dump(meta, path / "ensemble_meta.pkl")
 
         logger.info(f"Ensemble salvo em: {path}")
@@ -340,7 +321,7 @@ class RegionalEnsemble:
         X_val: pd.DataFrame | None = None,
         y_val: pd.Series | None = None,
         cod_ibge_train: pd.Series = None,
-        cod_ibge_val: pd.Series = None
+        cod_ibge_val: pd.Series = None,
     ) -> RegionalEnsemble:
         """Treina ensembles regionais."""
         if cod_ibge_train is None:
@@ -446,6 +427,7 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float
 
 def main():
     """Pipeline principal de treinamento do ensemble."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("TREINAMENTO ENSEMBLE")
     logger.info("=" * 60)
@@ -475,10 +457,12 @@ def main():
 
     regional_ensemble = RegionalEnsemble()
     regional_ensemble.fit(
-        X_train, y_train,
-        X_val, y_val,
+        X_train,
+        y_train,
+        X_val,
+        y_val,
         cod_ibge_train=df_train["cod_ibge"],
-        cod_ibge_val=df_val["cod_ibge"]
+        cod_ibge_val=df_val["cod_ibge"],
     )
 
     logger.info("\n" + "=" * 60)

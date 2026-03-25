@@ -5,10 +5,6 @@ from pandera import Check, Column, DataFrameSchema
 
 from src.common.io import PROJECT_ROOT, load_config
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
@@ -268,6 +264,7 @@ def calculate_coverage_stats(df: pd.DataFrame) -> dict:
 
 def main():
     """Executa validacao do arquivo de target."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("VALIDACAO DO TARGET - PRODUTIVIDADE DE SOJA")
     logger.info("=" * 60)

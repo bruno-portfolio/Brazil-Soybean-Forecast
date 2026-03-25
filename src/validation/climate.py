@@ -6,10 +6,6 @@ import pandera as pa
 
 from src.common.io import PROJECT_ROOT, load_config
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
@@ -286,6 +282,7 @@ def calculate_coverage_stats(df: pd.DataFrame) -> dict:
 
 def main():
     """Executa validacao do dataset climatico."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("VALIDACAO CLIMA")
     logger.info("=" * 60)

@@ -8,7 +8,6 @@ import pandas as pd
 
 from src.common.io import PROJECT_ROOT, load_municipalities, load_target_municipalities
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "ndvi_safra.parquet"
@@ -175,6 +174,7 @@ def process_all_municipalities(
 
 def main():
     """Pipeline principal."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.info("=" * 60)
     logger.info("INGESTAO NDVI - Google Earth Engine")
     logger.info("=" * 60)

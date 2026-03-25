@@ -4,13 +4,15 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from src.common.io import PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: Path | None = None) -> dict:
     """Carrega configuracao geografica do arquivo YAML."""
     if config_path is None:
-        config_path = Path(__file__).parents[2] / "configs" / "geo.yaml"
+        config_path = PROJECT_ROOT / "configs" / "geo.yaml"
 
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -165,7 +167,7 @@ def download_coordinates_from_ibge_cidades() -> dict[int, tuple[float, float]]:
 def process_municipalities(output_path: Path | None = None) -> pd.DataFrame:
     """Pipeline completo de processamento de municipios."""
     if output_path is None:
-        output_path = Path(__file__).parents[2] / "data" / "processed" / "municipalities.parquet"
+        output_path = PROJECT_ROOT / "data" / "processed" / "municipalities.parquet"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
