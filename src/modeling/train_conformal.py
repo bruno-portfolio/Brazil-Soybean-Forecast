@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 import json
+import logging
 import pickle
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 import numpy as np
 import pandas as pd
 
+from src.common.constants import REGION_SUL
 from src.modeling.split import create_temporal_split, get_feature_columns
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 MODELS_PATH = PROJECT_ROOT / "models"
 RESULTS_PATH = PROJECT_ROOT / "results"
-
-REGION_SUL = [41, 42, 43]
 
 
 @dataclass
@@ -100,9 +102,9 @@ def train_conformal_predictors() -> ConformalResult:
     """Treina calibradores conformal para os modelos regionais."""
     start_time = time.time()
 
-    print("=" * 60)
-    print("CONFORMAL PREDICTION - INTERVALOS CALIBRADOS")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("CONFORMAL PREDICTION - INTERVALOS CALIBRADOS")
+    logger.info("=" * 60)
 
     sul_path = MODELS_PATH / "model_sul.pkl"
     cerrado_path = MODELS_PATH / "model_cerrado.pkl"
@@ -117,9 +119,9 @@ def train_conformal_predictors() -> ConformalResult:
     with open(cerrado_path, "rb") as f:
         model_cerrado = pickle.load(f)
 
-    print("\nModelos regionais carregados.")
+    logger.info("\nModelos regionais carregados.")
 
-    print("\nCarregando dados...")
+    logger.info("\nCarregando dados...")
     split = create_temporal_split()
 
     split.train = add_region_column(split.train)
@@ -130,9 +132,9 @@ def train_conformal_predictors() -> ConformalResult:
     features_to_exclude = ["uf_cod", "region"]
     feature_cols = [f for f in feature_cols if f not in features_to_exclude]
 
-    print("\n" + "-" * 60)
-    print("CALIBRANDO MODELO SUL")
-    print("-" * 60)
+    logger.info("\n" + "-" * 60)
+    logger.info("CALIBRANDO MODELO SUL")
+    logger.info("-" * 60)
 
     val_sul = split.validation[split.validation["is_sul"] == 1]
     test_sul = split.test[split.test["is_sul"] == 1]
@@ -140,8 +142,8 @@ def train_conformal_predictors() -> ConformalResult:
     X_val_sul, y_val_sul, _ = prepare_data(val_sul, feature_cols)
     X_test_sul, y_test_sul, _ = prepare_data(test_sul, feature_cols)
 
-    print(f"  Calibracao: {len(X_val_sul):,} amostras")
-    print(f"  Teste: {len(X_test_sul):,} amostras")
+    logger.info(f"  Calibracao: {len(X_val_sul):,} amostras")
+    logger.info(f"  Teste: {len(X_test_sul):,} amostras")
 
     y_pred_val_sul = model_sul.predict(X_val_sul)
     y_pred_test_sul = model_sul.predict(X_test_sul)
@@ -155,18 +157,18 @@ def train_conformal_predictors() -> ConformalResult:
     coverage_80_sul = calculate_coverage(y_test_sul, lower_80_sul, upper_80_sul)
     coverage_90_sul = calculate_coverage(y_test_sul, lower_90_sul, upper_90_sul)
 
-    print(f"\n  Cobertura 80% Sul: {coverage_80_sul*100:.1f}% (esperado: 80%)")
-    print(f"  Cobertura 90% Sul: {coverage_90_sul*100:.1f}% (esperado: 90%)")
+    logger.info(f"\n  Cobertura 80% Sul: {coverage_80_sul * 100:.1f}% (esperado: 80%)")
+    logger.info(f"  Cobertura 90% Sul: {coverage_90_sul * 100:.1f}% (esperado: 90%)")
 
     width_80_sul = calculate_interval_width(lower_80_sul, upper_80_sul)
     width_90_sul = calculate_interval_width(lower_90_sul, upper_90_sul)
 
-    print(f"  Largura media 80%: {width_80_sul:.0f} kg/ha")
-    print(f"  Largura media 90%: {width_90_sul:.0f} kg/ha")
+    logger.info(f"  Largura media 80%: {width_80_sul:.0f} kg/ha")
+    logger.info(f"  Largura media 90%: {width_90_sul:.0f} kg/ha")
 
-    print("\n" + "-" * 60)
-    print("CALIBRANDO MODELO CERRADO")
-    print("-" * 60)
+    logger.info("\n" + "-" * 60)
+    logger.info("CALIBRANDO MODELO CERRADO")
+    logger.info("-" * 60)
 
     val_cerrado = split.validation[split.validation["is_sul"] == 0]
     test_cerrado = split.test[split.test["is_sul"] == 0]
@@ -174,8 +176,8 @@ def train_conformal_predictors() -> ConformalResult:
     X_val_cerrado, y_val_cerrado, _ = prepare_data(val_cerrado, feature_cols)
     X_test_cerrado, y_test_cerrado, _ = prepare_data(test_cerrado, feature_cols)
 
-    print(f"  Calibracao: {len(X_val_cerrado):,} amostras")
-    print(f"  Teste: {len(X_test_cerrado):,} amostras")
+    logger.info(f"  Calibracao: {len(X_val_cerrado):,} amostras")
+    logger.info(f"  Teste: {len(X_test_cerrado):,} amostras")
 
     y_pred_val_cerrado = model_cerrado.predict(X_val_cerrado)
     y_pred_test_cerrado = model_cerrado.predict(X_test_cerrado)
@@ -193,18 +195,18 @@ def train_conformal_predictors() -> ConformalResult:
     coverage_80_cerrado = calculate_coverage(y_test_cerrado, lower_80_cerrado, upper_80_cerrado)
     coverage_90_cerrado = calculate_coverage(y_test_cerrado, lower_90_cerrado, upper_90_cerrado)
 
-    print(f"\n  Cobertura 80% Cerrado: {coverage_80_cerrado*100:.1f}% (esperado: 80%)")
-    print(f"  Cobertura 90% Cerrado: {coverage_90_cerrado*100:.1f}% (esperado: 90%)")
+    logger.info(f"\n  Cobertura 80% Cerrado: {coverage_80_cerrado * 100:.1f}% (esperado: 80%)")
+    logger.info(f"  Cobertura 90% Cerrado: {coverage_90_cerrado * 100:.1f}% (esperado: 90%)")
 
     width_80_cerrado = calculate_interval_width(lower_80_cerrado, upper_80_cerrado)
     width_90_cerrado = calculate_interval_width(lower_90_cerrado, upper_90_cerrado)
 
-    print(f"  Largura media 80%: {width_80_cerrado:.0f} kg/ha")
-    print(f"  Largura media 90%: {width_90_cerrado:.0f} kg/ha")
+    logger.info(f"  Largura media 80%: {width_80_cerrado:.0f} kg/ha")
+    logger.info(f"  Largura media 90%: {width_90_cerrado:.0f} kg/ha")
 
-    print("\n" + "-" * 60)
-    print("METRICAS COMBINADAS")
-    print("-" * 60)
+    logger.info("\n" + "-" * 60)
+    logger.info("METRICAS COMBINADAS")
+    logger.info("-" * 60)
 
     y_test_all = np.concatenate([y_test_sul, y_test_cerrado])
 
@@ -220,12 +222,14 @@ def train_conformal_predictors() -> ConformalResult:
     width_80_combined = calculate_interval_width(lower_80_all, upper_80_all)
     width_90_combined = calculate_interval_width(lower_90_all, upper_90_all)
 
-    print(f"\n  Cobertura 80% Combinada: {coverage_80_combined*100:.1f}% (esperado: 80%)")
-    print(f"  Cobertura 90% Combinada: {coverage_90_combined*100:.1f}% (esperado: 90%)")
-    print(
-        f"\n  Largura media 80%: {width_80_combined:.0f} kg/ha ({width_80_combined/60:.1f} sc/ha)"
+    logger.info(f"\n  Cobertura 80% Combinada: {coverage_80_combined * 100:.1f}% (esperado: 80%)")
+    logger.info(f"  Cobertura 90% Combinada: {coverage_90_combined * 100:.1f}% (esperado: 90%)")
+    logger.info(
+        f"\n  Largura media 80%: {width_80_combined:.0f} kg/ha ({width_80_combined / 60:.1f} sc/ha)"
     )
-    print(f"  Largura media 90%: {width_90_combined:.0f} kg/ha ({width_90_combined/60:.1f} sc/ha)")
+    logger.info(
+        f"  Largura media 90%: {width_90_combined:.0f} kg/ha ({width_90_combined / 60:.1f} sc/ha)"
+    )
 
     MODELS_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -238,8 +242,8 @@ def train_conformal_predictors() -> ConformalResult:
     with open(cerrado_calibrator_path, "wb") as f:
         pickle.dump(calibrator_cerrado, f)
 
-    print(f"\n  Calibrador Sul salvo em: {sul_calibrator_path}")
-    print(f"  Calibrador Cerrado salvo em: {cerrado_calibrator_path}")
+    logger.info(f"\n  Calibrador Sul salvo em: {sul_calibrator_path}")
+    logger.info(f"  Calibrador Cerrado salvo em: {cerrado_calibrator_path}")
 
     training_time = time.time() - start_time
 
@@ -260,23 +264,25 @@ def train_conformal_predictors() -> ConformalResult:
     with open(result_path, "w") as f:
         json.dump(asdict(result), f, indent=2)
 
-    print("\n" + "=" * 60)
-    print("COMPARATIVO: QUANTILE vs CONFORMAL")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("COMPARATIVO: QUANTILE vs CONFORMAL")
+    logger.info("=" * 60)
 
-    print("\n{:<25} {:>15} {:>15}".format("Metrica", "Quantile", "Conformal"))
-    print("-" * 55)
-    print(
+    logger.info("\n{:<25} {:>15} {:>15}".format("Metrica", "Quantile", "Conformal"))
+    logger.info("-" * 55)
+    logger.info(
         "{:<25} {:>15.1f}% {:>15.1f}%".format(
             "Cobertura 80% Combinada", 50.4, coverage_80_combined * 100
         )
     )
-    print("{:<25} {:>15.0f} {:>15.0f}".format("Largura Intervalo 80%", 861, width_80_combined))
+    logger.info(
+        "{:<25} {:>15.0f} {:>15.0f}".format("Largura Intervalo 80%", 861, width_80_combined)
+    )
 
     improvement = (coverage_80_combined * 100 - 50.4) / 50.4 * 100
-    print(f"\n  Melhoria na cobertura: +{improvement:.0f}%")
+    logger.info(f"\n  Melhoria na cobertura: +{improvement:.0f}%")
 
-    print(f"\n  Tempo de calibracao: {training_time:.1f}s")
+    logger.info(f"\n  Tempo de calibracao: {training_time:.1f}s")
 
     return result
 

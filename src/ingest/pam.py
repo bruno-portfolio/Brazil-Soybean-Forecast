@@ -1,11 +1,10 @@
 import logging
 import time
-from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import requests
-import yaml
+
+from src.common.io import PROJECT_ROOT, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,18 +12,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "target.yaml"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 
 SIDRA_BASE_URL = "https://apisidra.ibge.gov.br/values"
-
-
-def load_config() -> dict[str, Any]:
-    """Carrega configuracao do target.yaml."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    return config["target"]
 
 
 def build_sidra_url(
@@ -36,14 +26,7 @@ def build_sidra_url(
     """Constroi URL para a API SIDRA (um ano por vez)."""
     vars_str = ",".join(str(v) for v in variables)
 
-    url = (
-        f"{SIDRA_BASE_URL}"
-        f"/t/{table}"
-        f"/n6/all"
-        f"/v/{vars_str}"
-        f"/p/{year}"
-        f"/c782/{product_code}"
-    )
+    url = f"{SIDRA_BASE_URL}/t/{table}/n6/all/v/{vars_str}/p/{year}/c782/{product_code}"
 
     return url
 
@@ -239,7 +222,7 @@ def main():
     logger.info("INGESTAO PAM - PRODUTIVIDADE DE SOJA")
     logger.info("=" * 60)
 
-    config = load_config()
+    config = load_config("target", section="target")
     logger.info(
         f"Configuracao carregada: {config['crop']}, {config['year_start']}-{config['year_end']}"
     )

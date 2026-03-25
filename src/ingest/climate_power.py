@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import requests
-import yaml
+
+from src.common.cache import consolidate_cache, get_cached_codes, save_to_cache
+from src.common.io import (
+    PROJECT_ROOT,
+    load_config,
+    load_municipalities,
+    load_target_municipalities,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,40 +20,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "climate.yaml"
-MUNICIPALITIES_PATH = PROJECT_ROOT / "data" / "processed" / "municipalities.parquet"
-TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "climate"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
-
-
-def load_config() -> dict[str, Any]:
-    """Carrega configuracao do climate.yaml."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    return config["climate"]
-
-
-def load_municipalities() -> pd.DataFrame:
-    """Carrega tabela de municipios com coordenadas."""
-    if not MUNICIPALITIES_PATH.exists():
-        raise FileNotFoundError(
-            f"Arquivo de municipios nao encontrado: {MUNICIPALITIES_PATH}\n"
-            "Execute primeiro: python -m src.ingest.municipalities"
-        )
-    return pd.read_parquet(MUNICIPALITIES_PATH)
-
-
-def load_target_municipalities() -> set[int]:
-    """Carrega lista de municipios que produzem soja."""
-    if not TARGET_PATH.exists():
-        raise FileNotFoundError(
-            f"Arquivo de target nao encontrado: {TARGET_PATH}\n"
-            "Execute primeiro: python -m src.ingest.pam"
-        )
-    df = pd.read_parquet(TARGET_PATH)
-    return set(df["cod_ibge"].unique())
 
 
 def build_power_url(
@@ -156,57 +129,6 @@ def download_climate_for_municipality(
     return None
 
 
-def get_cached_municipalities() -> set[int]:
-    """Retorna conjunto de municipios ja presentes no cache."""
-    if not CACHE_DIR.exists():
-        return set()
-
-    cached = set()
-    for f in CACHE_DIR.glob("*.parquet"):
-        try:
-            cod_ibge = int(f.stem)
-            cached.add(cod_ibge)
-        except ValueError:
-            continue
-
-    return cached
-
-
-def save_to_cache(df: pd.DataFrame, cod_ibge: int) -> None:
-    """Salva dados de um municipio no cache."""
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache_path = CACHE_DIR / f"{cod_ibge}.parquet"
-    df.to_parquet(cache_path, index=False)
-
-
-def load_from_cache(cod_ibge: int) -> pd.DataFrame | None:
-    """Carrega dados de um municipio do cache."""
-    cache_path = CACHE_DIR / f"{cod_ibge}.parquet"
-    if cache_path.exists():
-        return pd.read_parquet(cache_path)
-    return None
-
-
-def consolidate_cache() -> pd.DataFrame:
-    """Consolida todos os arquivos de cache em um unico DataFrame."""
-    if not CACHE_DIR.exists():
-        raise FileNotFoundError(f"Diretorio de cache nao encontrado: {CACHE_DIR}")
-
-    all_dfs = []
-    for f in CACHE_DIR.glob("*.parquet"):
-        try:
-            df = pd.read_parquet(f)
-            all_dfs.append(df)
-        except Exception as e:
-            logger.warning(f"Erro ao ler {f}: {e}")
-
-    if not all_dfs:
-        raise ValueError("Nenhum arquivo de cache encontrado")
-
-    df = pd.concat(all_dfs, ignore_index=True)
-    return df
-
-
 def calculate_statistics(df: pd.DataFrame) -> dict:
     """Calcula estatisticas do dataset climatico."""
     stats = {
@@ -238,7 +160,7 @@ def fetch_climate_for_municipalities(
     logger.info("INGESTAO CLIMA - NASA POWER")
     logger.info("=" * 60)
 
-    config = load_config()
+    config = load_config("climate", section="climate")
     logger.info(f"Periodo: {config['year_start']} - {config['year_end']}")
     logger.info(f"Parametros: {config['parameters']}")
 
@@ -254,7 +176,7 @@ def fetch_climate_for_municipalities(
         df_mun = df_mun.head(max_municipalities)
         logger.info(f"Limitado a {max_municipalities} municipios para teste")
 
-    cached = get_cached_municipalities()
+    cached = get_cached_codes(CACHE_DIR)
     logger.info(f"Municipios ja em cache: {len(cached):,}")
 
     pending = df_mun[~df_mun["cod_ibge"].isin(cached)]
@@ -275,7 +197,7 @@ def fetch_climate_for_municipalities(
         df_climate = download_climate_for_municipality(cod_ibge, lat, lon, config)
 
         if df_climate is not None:
-            save_to_cache(df_climate, cod_ibge)
+            save_to_cache(df_climate, cod_ibge, CACHE_DIR)
             success += 1
             logger.info(
                 f"[{success + failed}/{len(pending)}] cod_ibge={cod_ibge}: OK ({len(df_climate)} dias)"
@@ -297,7 +219,7 @@ def fetch_climate_for_municipalities(
         logger.info(f"Municipios com falha: {failed_list[:20]}...")
 
     logger.info("\nConsolidando cache...")
-    df_consolidated = consolidate_cache()
+    df_consolidated = consolidate_cache(CACHE_DIR)
 
     df_consolidated = df_consolidated.sort_values(["cod_ibge", "date"]).reset_index(drop=True)
 

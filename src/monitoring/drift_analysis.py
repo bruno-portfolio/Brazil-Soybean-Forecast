@@ -1,8 +1,11 @@
+import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -198,7 +201,7 @@ class DriftAnalyzer:
                 last_error = error_by_year[years[-1]]
                 if last_error > first_error * 1.5:
                     recommendations.append(
-                        f"Erro aumentou {((last_error/first_error)-1)*100:.0f}% entre "
+                        f"Erro aumentou {((last_error / first_error) - 1) * 100:.0f}% entre "
                         f"{years[0]} e {years[-1]}. Modelo pode estar degradando."
                     )
 
@@ -309,6 +312,7 @@ class DriftAnalyzer:
 
 def main():
     """Executa analise de drift nos dados do modelo."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     import pickle
     from pathlib import Path
 
@@ -317,19 +321,19 @@ def main():
     MODEL_PATH = PROJECT_ROOT / "models" / "model_v1.pkl"
     RESULTS_PATH = PROJECT_ROOT / "results"
 
-    print("=" * 70)
-    print("ANALISE DE DRIFT DO MODELO")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("ANALISE DE DRIFT DO MODELO")
+    logger.info("=" * 70)
 
-    print("\nCarregando dados...")
+    logger.info("\nCarregando dados...")
     df = pd.read_parquet(DATASET_PATH)
-    print(f"  Total de registros: {len(df):,}")
+    logger.info(f"  Total de registros: {len(df):,}")
 
     df_train = df[df["ano"] <= 2018]
     df_test = df[df["ano"] >= 2019]
 
-    print(f"  Treino (<=2018): {len(df_train):,}")
-    print(f"  Teste (>=2019): {len(df_test):,}")
+    logger.info(f"  Treino (<=2018): {len(df_train):,}")
+    logger.info(f"  Teste (>=2019): {len(df_test):,}")
 
     feature_cols = [
         "precip_total_mm",
@@ -349,7 +353,7 @@ def main():
         "produtividade_ma3",
     ]
 
-    print("\nCarregando modelo e calculando erro por ano...")
+    logger.info("\nCarregando modelo e calculando erro por ano...")
     with open(MODEL_PATH, "rb") as f:
         model = pickle.load(f)
 
@@ -366,13 +370,13 @@ def main():
         df_year = df_pred[df_pred["ano"] == year]
         mae = np.mean(np.abs(df_year["produtividade_kg_ha"] - df_year["pred"]))
         error_by_year[int(year)] = float(mae)
-        print(f"  {year}: MAE = {mae:.1f} kg/ha")
+        logger.info(f"  {year}: MAE = {mae:.1f} kg/ha")
 
-    print("\nAnalisando drift...")
+    logger.info("\nAnalisando drift...")
     analyzer = DriftAnalyzer()
     report = analyzer.analyze(df_train, df_test, feature_cols, error_by_year)
 
-    print(analyzer.format_report(report))
+    logger.info(analyzer.format_report(report))
 
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
     report_path = RESULTS_PATH / "drift_report.md"
@@ -383,7 +387,7 @@ def main():
         f.write(analyzer.format_report(report))
         f.write("\n```\n")
 
-    print(f"\nRelatorio salvo em: {report_path}")
+    logger.info(f"\nRelatorio salvo em: {report_path}")
 
 
 if __name__ == "__main__":

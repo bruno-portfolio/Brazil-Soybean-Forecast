@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,6 +11,7 @@ import yaml
 if TYPE_CHECKING:
     pass
 
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "configs" / "split.yaml"
@@ -153,43 +155,43 @@ def get_feature_columns(df: pd.DataFrame) -> list[str]:
 
 def main() -> None:
     """Pipeline principal de split."""
-    print("=" * 60)
-    print("SPLIT TEMPORAL DOS DADOS")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("SPLIT TEMPORAL DOS DADOS")
+    logger.info("=" * 60)
 
     config = load_config()
-    print("\nConfiguracao:")
-    print(f"  Treino: <= {config.train_end_year}")
-    print(f"  Validacao: {config.val_start_year}-{config.val_end_year}")
-    print(f"  Teste: {config.test_start_year}-{config.test_end_year}")
+    logger.info("Configuracao:")
+    logger.info(f"  Treino: <= {config.train_end_year}")
+    logger.info(f"  Validacao: {config.val_start_year}-{config.val_end_year}")
+    logger.info(f"  Teste: {config.test_start_year}-{config.test_end_year}")
 
-    print("\nCriando split temporal...")
+    logger.info("Criando split temporal...")
     split = create_temporal_split()
 
     summary = split.summary()
-    print("\nResumo do split:")
+    logger.info("Resumo do split:")
     for name, stats in summary.items():
-        print(f"\n  {name.upper()}:")
-        print(f"    Amostras: {stats['n_samples']:,}")
-        print(f"    Municipios: {stats['n_municipalities']:,}")
-        print(f"    Anos: {stats['year_range']}")
-        print(f"    Anos especificos: {stats['years']}")
+        logger.info(f"  {name.upper()}:")
+        logger.info(f"    Amostras: {stats['n_samples']:,}")
+        logger.info(f"    Municipios: {stats['n_municipalities']:,}")
+        logger.info(f"    Anos: {stats['year_range']}")
+        logger.info(f"    Anos especificos: {stats['years']}")
 
-    print("\n" + "=" * 60)
-    print("VALIDACAO DE LEAKAGE")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("VALIDACAO DE LEAKAGE")
+    logger.info("=" * 60)
     try:
         validate_no_leakage(split)
-        print("\n[OK] Nenhum leakage temporal detectado")
-        print(f"[OK] Treino: max ano = {split.train['ano'].max()} <= {config.train_end_year}")
-        print(f"[OK] Validacao: anos = {sorted(split.validation['ano'].unique().tolist())}")
-        print(f"[OK] Teste: anos = {sorted(split.test['ano'].unique().tolist())}")
+        logger.info("[OK] Nenhum leakage temporal detectado")
+        logger.info(f"[OK] Treino: max ano = {split.train['ano'].max()} <= {config.train_end_year}")
+        logger.info(f"[OK] Validacao: anos = {sorted(split.validation['ano'].unique().tolist())}")
+        logger.info(f"[OK] Teste: anos = {sorted(split.test['ano'].unique().tolist())}")
     except ValueError as e:
-        print(f"\n[ERRO] {e}")
+        logger.warning(f"[ERRO] {e}")
 
-    print("\n" + "=" * 60)
-    print("ESTATISTICAS DO TARGET POR SPLIT")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("ESTATISTICAS DO TARGET POR SPLIT")
+    logger.info("=" * 60)
     target_col = "produtividade_kg_ha"
     for name, data in [
         ("Treino", split.train),
@@ -197,11 +199,11 @@ def main() -> None:
         ("Teste", split.test),
     ]:
         stats = data[target_col].describe()
-        print(f"\n{name}:")
-        print(f"  Media: {stats['mean']:.1f} kg/ha ({stats['mean']/60:.1f} sacas/ha)")
-        print(f"  Mediana: {stats['50%']:.1f} kg/ha")
-        print(f"  Std: {stats['std']:.1f} kg/ha")
-        print(f"  Min-Max: {stats['min']:.0f} - {stats['max']:.0f} kg/ha")
+        logger.info(f"{name}:")
+        logger.info(f"  Media: {stats['mean']:.1f} kg/ha ({stats['mean'] / 60:.1f} sacas/ha)")
+        logger.info(f"  Mediana: {stats['50%']:.1f} kg/ha")
+        logger.info(f"  Std: {stats['std']:.1f} kg/ha")
+        logger.info(f"  Min-Max: {stats['min']:.0f} - {stats['max']:.0f} kg/ha")
 
 
 if __name__ == "__main__":

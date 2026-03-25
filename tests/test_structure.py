@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 
 def get_project_root() -> Path:
     """Retorna o diretorio raiz do projeto."""
@@ -18,6 +16,7 @@ class TestProjectStructure:
         root = get_project_root()
         expected_dirs = [
             "src",
+            "src/common",
             "src/ingest",
             "src/validation",
             "src/features",
@@ -83,11 +82,12 @@ class TestImports:
 
     def test_import_submodules(self):
         """Verifica se os submodulos podem ser importados."""
-        import src.ingest
-        import src.validation
-        import src.features
-        import src.modeling
-        import src.evaluation
-        import src.inference
+        import src.common  # noqa: F401
+        import src.evaluation  # noqa: F401
+        import src.features  # noqa: F401
+        import src.inference  # noqa: F401
+        import src.ingest  # noqa: F401
+        import src.modeling  # noqa: F401
+        import src.validation  # noqa: F401
 
         assert True  # Se chegou aqui, imports funcionaram

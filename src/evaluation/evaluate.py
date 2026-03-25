@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import pickle
 from datetime import datetime
 from pathlib import Path
@@ -9,10 +10,12 @@ from typing import Any
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from src.common.io import PROJECT_ROOT, load_municipalities
 from src.evaluation.metrics import compute_all_metrics
 from src.modeling.split import create_temporal_split, get_feature_columns
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+logger = logging.getLogger(__name__)
+
 MODELS_PATH = PROJECT_ROOT / "models"
 RESULTS_PATH = PROJECT_ROOT / "results"
 DATA_PATH = PROJECT_ROOT / "data" / "processed"
@@ -23,12 +26,6 @@ def load_model(version: str = "v1"):
     model_path = MODELS_PATH / f"model_{version}.pkl"
     with open(model_path, "rb") as f:
         return pickle.load(f)
-
-
-def load_municipalities() -> pd.DataFrame:
-    """Carrega dados de municipios para ter UF."""
-    path = DATA_PATH / "municipalities.parquet"
-    return pd.read_parquet(path)[["cod_ibge", "uf"]]
 
 
 def load_baselines() -> dict[str, Any]:
@@ -326,29 +323,29 @@ def generate_evaluation_report(
 
 def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
     """Executa avaliacao completa do modelo."""
-    print("=" * 60)
-    print("AVALIACAO COMPLETA DO MODELO")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("AVALIACAO COMPLETA DO MODELO")
+    logger.info("=" * 60)
 
-    print("\nCarregando modelo e dados...")
+    logger.info("Carregando modelo e dados...")
     model = load_model(model_version)
     split = create_temporal_split()
     feature_cols = get_feature_columns(split.train)
-    municipalities = load_municipalities()
+    municipalities = load_municipalities(columns=["cod_ibge", "uf"])
     baselines = load_baselines()
 
     metadata_path = MODELS_PATH / f"model_{model_version}_metadata.json"
     with open(metadata_path) as f:
         metadata = json.load(f)
 
-    print("\nGerando predicoes...")
+    logger.info("Gerando predicoes...")
     val_with_pred = add_predictions(split.validation, model, feature_cols)
     test_with_pred = add_predictions(split.test, model, feature_cols)
 
     val_with_pred = val_with_pred.merge(municipalities, on="cod_ibge", how="left")
     test_with_pred = test_with_pred.merge(municipalities, on="cod_ibge", how="left")
 
-    print("\nCalculando metricas...")
+    logger.info("Calculando metricas...")
     val_metrics = compute_all_metrics(
         val_with_pred["produtividade_kg_ha"].values,
         val_with_pred["pred"].values,
@@ -363,18 +360,18 @@ def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
         "test": test_metrics,
     }
 
-    print("\nAnalisando erro por UF...")
+    logger.info("Analisando erro por UF...")
     error_by_uf = calculate_error_by_group(test_with_pred, "uf")
 
-    print("\nAnalisando erro por ano...")
+    logger.info("Analisando erro por ano...")
     all_with_pred = pd.concat([val_with_pred, test_with_pred])
     error_by_year = calculate_error_by_group(all_with_pred, "ano")
     error_by_year = error_by_year.sort_values("ano")
 
-    print("\nAnalisando erro por faixa de produtividade...")
+    logger.info("Analisando erro por faixa de produtividade...")
     error_by_range = calculate_error_by_productivity_range(test_with_pred)
 
-    print("\nGerando graficos...")
+    logger.info("Gerando graficos...")
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
     create_scatter_plot(
@@ -388,7 +385,7 @@ def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
         output_path=RESULTS_PATH / "error_by_year.png",
     )
 
-    print("\nGerando relatorio...")
+    logger.info("Gerando relatorio...")
     report = generate_evaluation_report(
         model_metrics=model_metrics,
         baselines=baselines,
@@ -417,23 +414,23 @@ def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
 
-    print("\n" + "=" * 60)
-    print("RESUMO DA AVALIACAO")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("RESUMO DA AVALIACAO")
+    logger.info("=" * 60)
 
-    print("\nComparacao com Baselines (TESTE):")
-    print("-" * 50)
-    print(f"{'Modelo':<20} {'MAE (kg/ha)':<15} {'MAE (sc/ha)':<15}")
-    print("-" * 50)
-    print(
+    logger.info("Comparacao com Baselines (TESTE):")
+    logger.info("-" * 50)
+    logger.info(f"{'Modelo':<20} {'MAE (kg/ha)':<15} {'MAE (sc/ha)':<15}")
+    logger.info("-" * 50)
+    logger.info(
         f"{'baseline_lag1':<20} {baselines['baseline_lag1']['test_metrics']['mae_kg_ha']:<15.1f} "
         f"{baselines['baseline_lag1']['test_metrics']['mae_sacas_ha']:<15.2f}"
     )
-    print(
+    logger.info(
         f"{'baseline_ma3':<20} {baselines['baseline_ma3']['test_metrics']['mae_kg_ha']:<15.1f} "
         f"{baselines['baseline_ma3']['test_metrics']['mae_sacas_ha']:<15.2f}"
     )
-    print(
+    logger.info(
         f"{'LightGBM':<20} {test_metrics['mae_kg_ha']:<15.1f} {test_metrics['mae_sacas_ha']:<15.2f}"
     )
 
@@ -442,12 +439,12 @@ def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
             (baselines["baseline_ma3"]["test_metrics"]["mae_kg_ha"] - test_metrics["mae_kg_ha"])
             / baselines["baseline_ma3"]["test_metrics"]["mae_kg_ha"]
         ) * 100
-        print(f"\n[OK] Modelo superou baseline_ma3 em {gain:.1f}%")
+        logger.info(f"[OK] Modelo superou baseline_ma3 em {gain:.1f}%")
     else:
-        print("\n[ATENCAO] Modelo NAO superou baseline_ma3")
+        logger.warning("[ATENCAO] Modelo NAO superou baseline_ma3")
 
-    print(f"\nRelatorio salvo em: {report_path}")
-    print(f"Graficos salvos em: {RESULTS_PATH}")
+    logger.info(f"Relatorio salvo em: {report_path}")
+    logger.info(f"Graficos salvos em: {RESULTS_PATH}")
 
     return results
 

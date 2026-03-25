@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import pickle
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import lightgbm as lgb
 import numpy as np
@@ -163,43 +166,43 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
 
     start_time = time.time()
 
-    print("=" * 60)
-    print("TREINAMENTO DO MODELO PRINCIPAL")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("TREINAMENTO DO MODELO PRINCIPAL")
+    logger.info("=" * 60)
 
     config = load_config()
-    print(f"\nAlgoritmo: {config.algorithm}")
-    print(
+    logger.info(f"\nAlgoritmo: {config.algorithm}")
+    logger.info(
         f"Early stopping: {config.early_stopping_enabled} ({config.early_stopping_rounds} rounds)"
     )
 
-    print("\nCarregando dados e criando split temporal...")
+    logger.info("\nCarregando dados e criando split temporal...")
     split = create_temporal_split()
 
     feature_cols = get_feature_columns(split.train)
-    print(f"\nFeatures ({len(feature_cols)}):")
+    logger.info(f"\nFeatures ({len(feature_cols)}):")
     for col in feature_cols:
-        print(f"  - {col}")
+        logger.info(f"  - {col}")
 
-    print("\nPreparando dados...")
+    logger.info("\nPreparando dados...")
     X_train, y_train = prepare_data(split.train, feature_cols)
     X_val, y_val = prepare_data(split.validation, feature_cols)
     X_test, y_test = prepare_data(split.test, feature_cols)
 
-    print(f"  Treino: {len(X_train):,} amostras")
-    print(f"  Validacao: {len(X_val):,} amostras")
-    print(f"  Teste: {len(X_test):,} amostras")
+    logger.info(f"  Treino: {len(X_train):,} amostras")
+    logger.info(f"  Validacao: {len(X_val):,} amostras")
+    logger.info(f"  Teste: {len(X_test):,} amostras")
 
-    print("\nTreinando modelo...")
+    logger.info("\nTreinando modelo...")
     model, best_iteration = train_lightgbm(X_train, y_train, X_val, y_val, feature_cols, config)
-    print(f"  Melhor iteracao: {best_iteration}")
+    logger.info(f"  Melhor iteracao: {best_iteration}")
 
-    print("\nFazendo predicoes...")
+    logger.info("\nFazendo predicoes...")
     y_train_pred = model.predict(X_train)
     y_val_pred = model.predict(X_val)
     y_test_pred = model.predict(X_test)
 
-    print("\nCalculando metricas...")
+    logger.info("\nCalculando metricas...")
     train_metrics = compute_all_metrics(y_train, y_train_pred)
     val_metrics = compute_all_metrics(y_val, y_val_pred)
     test_metrics = compute_all_metrics(y_test, y_test_pred)
@@ -220,18 +223,18 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
         config=asdict(config),
     )
 
-    print("\nSalvando modelo...")
+    logger.info("\nSalvando modelo...")
     model_path = save_model(model, result, version)
     result.model_path = model_path
-    print(f"  Modelo salvo em: {model_path}")
+    logger.info(f"  Modelo salvo em: {model_path}")
 
-    print("\n" + "=" * 60)
-    print("RESULTADOS DO TREINAMENTO")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("RESULTADOS DO TREINAMENTO")
+    logger.info("=" * 60)
 
-    print("\n{:<15} {:>12} {:>12} {:>12}".format("Metrica", "Treino", "Validacao", "Teste"))
-    print("-" * 51)
-    print(
+    logger.info("\n{:<15} {:>12} {:>12} {:>12}".format("Metrica", "Treino", "Validacao", "Teste"))
+    logger.info("-" * 51)
+    logger.info(
         "{:<15} {:>12.2f} {:>12.2f} {:>12.2f}".format(
             "MAE (kg/ha)",
             train_metrics["mae_kg_ha"],
@@ -239,7 +242,7 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
             test_metrics["mae_kg_ha"],
         )
     )
-    print(
+    logger.info(
         "{:<15} {:>12.2f} {:>12.2f} {:>12.2f}".format(
             "MAE (sc/ha)",
             train_metrics["mae_sacas_ha"],
@@ -247,7 +250,7 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
             test_metrics["mae_sacas_ha"],
         )
     )
-    print(
+    logger.info(
         "{:<15} {:>12.2f} {:>12.2f} {:>12.2f}".format(
             "RMSE (kg/ha)",
             train_metrics["rmse_kg_ha"],
@@ -255,7 +258,7 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
             test_metrics["rmse_kg_ha"],
         )
     )
-    print(
+    logger.info(
         "{:<15} {:>12.2f} {:>12.2f} {:>12.2f}".format(
             "MAPE (%)",
             train_metrics["mape_percent"],
@@ -264,17 +267,17 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
         )
     )
 
-    print("\n" + "=" * 60)
-    print("IMPORTANCIA DAS FEATURES (TOP 10)")
-    print("=" * 60)
-    print("\n{:<25} {:>15}".format("Feature", "Importancia"))
-    print("-" * 40)
+    logger.info("\n" + "=" * 60)
+    logger.info("IMPORTANCIA DAS FEATURES (TOP 10)")
+    logger.info("=" * 60)
+    logger.info("\n{:<25} {:>15}".format("Feature", "Importancia"))
+    logger.info("-" * 40)
     for i, (feat, imp) in enumerate(feature_importance.items()):
         if i >= 10:
             break
-        print(f"{feat:<25} {imp:>15.2f}")
+        logger.info(f"{feat:<25} {imp:>15.2f}")
 
-    print(f"\nTempo de treinamento: {training_time:.1f}s")
+    logger.info(f"\nTempo de treinamento: {training_time:.1f}s")
 
     return result
 
@@ -288,7 +291,7 @@ def main() -> None:
     with open(result_path, "w") as f:
         json.dump(asdict(result), f, indent=2, default=str)
 
-    print(f"\nResultado salvo em: {result_path}")
+    logger.info(f"\nResultado salvo em: {result_path}")
 
 
 if __name__ == "__main__":

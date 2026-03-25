@@ -1,10 +1,9 @@
 import logging
-from pathlib import Path
-from typing import Any
 
 import pandas as pd
-import yaml
 from pandera import Check, Column, DataFrameSchema
+
+from src.common.io import PROJECT_ROOT, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,16 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "target.yaml"
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
-
-
-def load_config() -> dict[str, Any]:
-    """Carrega configuracao do target.yaml."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    return config["target"]
 
 
 def validate_primary_key(df: pd.DataFrame) -> tuple[bool, str]:
@@ -115,12 +105,12 @@ def validate_cross_check(
     if pct_violacoes > 1.0:
         return False, (
             f"Cross-check falhou: {violacoes:,} registros ({pct_violacoes:.1f}%) "
-            f"com diferenca > {tolerance*100:.0f}% entre produtividade reportada e calculada"
+            f"com diferenca > {tolerance * 100:.0f}% entre produtividade reportada e calculada"
         )
 
     return True, (
         f"Cross-check OK: {len(df_check):,} registros verificados, "
-        f"{violacoes:,} ({pct_violacoes:.2f}%) com diferenca > {tolerance*100:.0f}%"
+        f"{violacoes:,} ({pct_violacoes:.2f}%) com diferenca > {tolerance * 100:.0f}%"
     )
 
 
@@ -155,7 +145,7 @@ def validate_cod_ibge_format(df: pd.DataFrame) -> tuple[bool, str]:
 def validate_target(df: pd.DataFrame, config: dict | None = None) -> dict:
     """Executa todas as validacoes do target."""
     if config is None:
-        config = load_config()
+        config = load_config("target", section="target")
 
     validation_config = config.get("validation", {})
     prod_min = validation_config.get("productivity_min", 0)
@@ -193,7 +183,7 @@ def validate_target(df: pd.DataFrame, config: dict | None = None) -> dict:
 def get_target_schema(config: dict | None = None) -> DataFrameSchema:
     """Cria schema Pandera para validacao do target."""
     if config is None:
-        config = load_config()
+        config = load_config("target", section="target")
 
     validation_config = config.get("validation", {})
     prod_min = validation_config.get("productivity_min", 0)
@@ -290,7 +280,7 @@ def main():
     df = pd.read_parquet(DATA_PATH)
     logger.info(f"Dados carregados: {len(df):,} registros")
 
-    config = load_config()
+    config = load_config("target", section="target")
 
     results = validate_target(df, config)
 

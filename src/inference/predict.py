@@ -3,10 +3,19 @@ import json
 import logging
 import pickle
 from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from src.common.constants import REGION_SUL
+from src.common.io import PROJECT_ROOT, load_municipalities
+from src.common.phenology import (
+    assign_crop_year,
+    assign_phenology_phase,
+    calculate_dry_spell_metrics,
+    calculate_gdd,
+    calculate_precip_variability,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,13 +23,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 MODEL_PATH = PROJECT_ROOT / "models" / "model_v1.pkl"
 MODEL_METADATA_PATH = PROJECT_ROOT / "results" / "training_result.json"
 CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
 TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 ENSO_PATH = PROJECT_ROOT / "data" / "processed" / "oni_enso.parquet"
-MUNICIPALITIES_PATH = PROJECT_ROOT / "data" / "processed" / "municipalities.parquet"
 OUTPUT_PATH = PROJECT_ROOT / "results" / "predictions_2024_2025.parquet"
 OUTPUT_JSON_PATH = PROJECT_ROOT / "results" / "predictions_metadata.json"
 
@@ -31,7 +38,6 @@ REGIONAL_METADATA_PATH = PROJECT_ROOT / "results" / "regional_training_result.js
 CONFORMAL_SUL_PATH = PROJECT_ROOT / "models" / "conformal_sul.pkl"
 CONFORMAL_CERRADO_PATH = PROJECT_ROOT / "models" / "conformal_cerrado.pkl"
 
-REGION_SUL = [41, 42, 43]
 
 QUANTILE_MODELS_PATH = {
     0.05: PROJECT_ROOT / "models" / "quantile_p05.pkl",
@@ -140,9 +146,9 @@ def load_quantile_models() -> dict:
         if path.exists():
             with open(path, "rb") as f:
                 models[quantile] = pickle.load(f)
-            logger.info(f"  p{int(quantile*100):02d} carregado de: {path}")
+            logger.info(f"  p{int(quantile * 100):02d} carregado de: {path}")
         else:
-            logger.warning(f"  p{int(quantile*100):02d} NAO encontrado: {path}")
+            logger.warning(f"  p{int(quantile * 100):02d} NAO encontrado: {path}")
 
     if len(models) == 0:
         logger.warning("  Nenhum modelo quantilico encontrado!")
@@ -182,14 +188,6 @@ def load_enso_data() -> pd.DataFrame:
     return df
 
 
-def load_municipalities() -> pd.DataFrame:
-    """Carrega lista de municipios."""
-    logger.info("Carregando municipios...")
-    df = pd.read_parquet(MUNICIPALITIES_PATH)
-    logger.info(f"  Municipios: {len(df):,}")
-    return df
-
-
 def get_soy_producing_municipalities(df_target: pd.DataFrame, min_years: int = 3) -> list:
     """Retorna lista de municipios produtores de soja."""
     recent_years = df_target[df_target["ano"] >= 2020]
@@ -197,91 +195,6 @@ def get_soy_producing_municipalities(df_target: pd.DataFrame, min_years: int = 3
     producers = counts[counts >= min_years].index.tolist()
     logger.info(f"  Municipios produtores (>= {min_years} anos desde 2020): {len(producers):,}")
     return producers
-
-
-def assign_crop_year(date: pd.Timestamp, start_month: int = 10, end_month: int = 3) -> int:
-    """Atribui o ano da safra para uma data."""
-    month = date.month
-    year = date.year
-
-    if month >= start_month:
-        return year + 1
-    elif month <= end_month:
-        return year
-    else:
-        return None
-
-
-def assign_phenology_phase(date: pd.Timestamp) -> str:
-    """Atribui a fase fenologica para uma data."""
-    month = date.month
-
-    if month in [10, 11]:
-        return "plantio"
-    elif month in [12, 1]:
-        return "vegetativo"
-    elif month in [2, 3]:
-        return "enchimento"
-    else:
-        return None
-
-
-def calculate_gdd(row: pd.Series, base_temp: float = 10.0) -> float:
-    """Calcula Growing Degree Days (GDD) para um dia."""
-    return max(0, row["tmean"] - base_temp)
-
-
-def calculate_dry_spell_metrics(df_group: pd.DataFrame, threshold_mm: float = 2.0) -> dict:
-    """Calcula metricas de veranico para um grupo (municipio/safra)."""
-    if len(df_group) == 0:
-        return {
-            "dry_spell_max": 0,
-            "dry_spell_count_7d": 0,
-            "dry_spell_count_10d": 0,
-        }
-
-    df_sorted = df_group.sort_values("date")
-    precip = df_sorted["precip"].values
-
-    is_dry = precip < threshold_mm
-
-    dry_spells = []
-    current_spell = 0
-
-    for dry in is_dry:
-        if dry:
-            current_spell += 1
-        else:
-            if current_spell > 0:
-                dry_spells.append(current_spell)
-            current_spell = 0
-
-    if current_spell > 0:
-        dry_spells.append(current_spell)
-
-    return {
-        "dry_spell_max": max(dry_spells) if dry_spells else 0,
-        "dry_spell_count_7d": sum(1 for s in dry_spells if s >= 7),
-        "dry_spell_count_10d": sum(1 for s in dry_spells if s >= 10),
-    }
-
-
-def calculate_precip_variability(df_group: pd.DataFrame) -> dict:
-    """Calcula metricas de variabilidade da precipitacao."""
-    if len(df_group) == 0:
-        return {"precip_cv": 0, "precip_days_gt1mm": 0}
-
-    precip = df_group["precip"].values
-
-    mean_precip = precip.mean()
-    cv = precip.std() / mean_precip if mean_precip > 0 else 0
-
-    days_with_rain = (precip > 1.0).sum()
-
-    return {
-        "precip_cv": cv,
-        "precip_days_gt1mm": int(days_with_rain),
-    }
 
 
 def prepare_climate_features(
@@ -414,9 +327,7 @@ def add_regional_features(df: pd.DataFrame) -> pd.DataFrame:
 
     df["uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
 
-    sul_ufs = [41, 42, 43]
-
-    df["is_sul"] = df["uf_cod"].isin(sul_ufs).astype(int)
+    df["is_sul"] = df["uf_cod"].isin(REGION_SUL).astype(int)
 
     if "is_la_nina" in df.columns:
         df["sul_x_la_nina"] = df["is_sul"] * df["is_la_nina"]
@@ -430,7 +341,7 @@ def add_regional_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.drop(columns=["uf_cod"])
 
     n_sul = df["is_sul"].sum()
-    logger.info(f"  Registros do Sul: {n_sul:,} ({n_sul/len(df)*100:.1f}%)")
+    logger.info(f"  Registros do Sul: {n_sul:,} ({n_sul / len(df) * 100:.1f}%)")
 
     return df
 
@@ -514,7 +425,7 @@ def generate_predictions(
 
         for quantile, q_model in quantile_models.items():
             q_pred = q_model.predict(X)
-            q_str = f"p{int(quantile*100):02d}"
+            q_str = f"p{int(quantile * 100):02d}"
             df[f"pred_{q_str}_kg_ha"] = q_pred
             df[f"pred_{q_str}_sacas_ha"] = q_pred / 60
 
@@ -811,7 +722,7 @@ def main():
         logger.info(f"  Municipios: {len(df_year):,}")
         logger.info("  Produtividade prevista (ponto):")
         logger.info(
-            f"    Media: {df_year['pred_produtividade_kg_ha'].mean():.1f} kg/ha ({df_year['pred_produtividade_kg_ha'].mean()/60:.1f} sc/ha)"
+            f"    Media: {df_year['pred_produtividade_kg_ha'].mean():.1f} kg/ha ({df_year['pred_produtividade_kg_ha'].mean() / 60:.1f} sc/ha)"
         )
         logger.info(f"    Mediana: {df_year['pred_produtividade_kg_ha'].median():.1f} kg/ha")
         logger.info(f"    Min: {df_year['pred_produtividade_kg_ha'].min():.1f} kg/ha")
@@ -829,7 +740,7 @@ def main():
     for uf in uf_counts.head(5).index:
         df_uf = df[df["uf"] == uf]
         mean_pred = df_uf["pred_produtividade_kg_ha"].mean()
-        logger.info(f"  {uf}: {len(df_uf)//2} municipios, media {mean_pred:.0f} kg/ha")
+        logger.info(f"  {uf}: {len(df_uf) // 2} municipios, media {mean_pred:.0f} kg/ha")
 
     save_predictions(df, model_metadata, years_to_predict)
 

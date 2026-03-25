@@ -1,6 +1,9 @@
+import logging
 from dataclasses import dataclass
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -187,9 +190,7 @@ class RiskTranslator:
                     f"Municipio com baixo risco climatico."
                 )
             else:
-                texto = (
-                    f"APROVAR CREDITO - Baixo risco de quebra. " f"Spread sugerido: {spread}% a.a."
-                )
+                texto = f"APROVAR CREDITO - Baixo risco de quebra. Spread sugerido: {spread}% a.a."
 
         elif rating == "B":
             texto = (
@@ -327,13 +328,13 @@ class RiskTranslator:
 
         relatorio = f"""
 {sep}
-ANALISE DE RISCO - {analise.municipio or 'N/A'}/{analise.uf} - SAFRA {analise.ano}
+ANALISE DE RISCO - {analise.municipio or "N/A"}/{analise.uf} - SAFRA {analise.ano}
 {sep}
 
 PREVISAO DE PRODUTIVIDADE:
-  Cenario Pessimista (p10):   {analise.pred_p10_kg_ha:.0f} kg/ha ({analise.pred_p10_kg_ha/60:.1f} sc/ha)
-  Cenario Base (p50):         {analise.pred_p50_kg_ha:.0f} kg/ha ({analise.pred_p50_kg_ha/60:.1f} sc/ha)
-  Cenario Otimista (p90):     {analise.pred_p90_kg_ha:.0f} kg/ha ({analise.pred_p90_kg_ha/60:.1f} sc/ha)
+  Cenario Pessimista (p10):   {analise.pred_p10_kg_ha:.0f} kg/ha ({analise.pred_p10_kg_ha / 60:.1f} sc/ha)
+  Cenario Base (p50):         {analise.pred_p50_kg_ha:.0f} kg/ha ({analise.pred_p50_kg_ha / 60:.1f} sc/ha)
+  Cenario Otimista (p90):     {analise.pred_p90_kg_ha:.0f} kg/ha ({analise.pred_p90_kg_ha / 60:.1f} sc/ha)
 
 ANALISE FINANCEIRA:
   Preco considerado:          R$ {analise.preco_saca:.2f}/saca
@@ -346,7 +347,7 @@ ANALISE FINANCEIRA:
   | Otimista   | R$ {analise.cenario_otimista.receita_ha:,.2f} | R$ {analise.cenario_otimista.lucro_ha:,.2f} | {analise.cenario_otimista.margem_percent:.1f}% |
 
 RISCO DE QUEBRA:
-  Probabilidade de Receita < Custo: {analise.probabilidade_quebra*100:.1f}%
+  Probabilidade de Receita < Custo: {analise.probabilidade_quebra * 100:.1f}%
 
   RATING: [{analise.rating}] {analise.rating_descricao}
 
@@ -361,13 +362,14 @@ RECOMENDACAO:
 
 def main():
     """Exemplo de uso do RiskTranslator."""
-    print("=" * 70)
-    print("EXEMPLO DE USO DO RISK TRANSLATOR")
-    print("=" * 70)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logger.info("=" * 70)
+    logger.info("EXEMPLO DE USO DO RISK TRANSLATOR")
+    logger.info("=" * 70)
 
     translator = RiskTranslator()
 
-    print("\n--- Exemplo 1: Sorriso/MT (Centro-Oeste, estavel) ---")
+    logger.info("\n--- Exemplo 1: Sorriso/MT (Centro-Oeste, estavel) ---")
     analise_mt = translator.calcular_risco(
         pred_p10=3200,
         pred_p50=3450,
@@ -377,9 +379,9 @@ def main():
         municipio="Sorriso",
         preco_saca=115.0,
     )
-    print(translator.gerar_relatorio_texto(analise_mt))
+    logger.info(translator.gerar_relatorio_texto(analise_mt))
 
-    print("\n--- Exemplo 2: Nao-Me-Toque/RS (Sul, volatil) ---")
+    logger.info("\n--- Exemplo 2: Nao-Me-Toque/RS (Sul, volatil) ---")
     analise_rs = translator.calcular_risco(
         pred_p10=1800,
         pred_p50=2400,
@@ -389,7 +391,7 @@ def main():
         municipio="Nao-Me-Toque",
         preco_saca=115.0,
     )
-    print(translator.gerar_relatorio_texto(analise_rs))
+    logger.info(translator.gerar_relatorio_texto(analise_rs))
 
 
 if __name__ == "__main__":

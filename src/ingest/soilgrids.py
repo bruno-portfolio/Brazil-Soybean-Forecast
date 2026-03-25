@@ -1,11 +1,17 @@
 import logging
 import time
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import requests
-import yaml
+
+from src.common.cache import consolidate_cache, get_cached_codes, save_to_cache
+from src.common.io import (
+    PROJECT_ROOT,
+    load_config,
+    load_municipalities,
+    load_target_municipalities,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,40 +19,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "soil.yaml"
-MUNICIPALITIES_PATH = PROJECT_ROOT / "data" / "processed" / "municipalities.parquet"
-TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "soil"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "soil_properties.parquet"
-
-
-def load_config() -> dict[str, Any]:
-    """Carrega configuracao do soil.yaml."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    return config["soil"]
-
-
-def load_municipalities() -> pd.DataFrame:
-    """Carrega tabela de municipios com coordenadas."""
-    if not MUNICIPALITIES_PATH.exists():
-        raise FileNotFoundError(
-            f"Arquivo de municipios nao encontrado: {MUNICIPALITIES_PATH}\n"
-            "Execute primeiro: python -m src.ingest.municipalities"
-        )
-    return pd.read_parquet(MUNICIPALITIES_PATH)
-
-
-def load_target_municipalities() -> set[int]:
-    """Carrega lista de municipios que produzem soja."""
-    if not TARGET_PATH.exists():
-        raise FileNotFoundError(
-            f"Arquivo de target nao encontrado: {TARGET_PATH}\n"
-            "Execute primeiro: python -m src.ingest.pam"
-        )
-    df = pd.read_parquet(TARGET_PATH)
-    return set(df["cod_ibge"].unique())
 
 
 def build_soilgrids_url(
@@ -207,59 +181,6 @@ def download_soil_for_municipality(
     return None
 
 
-def get_cached_municipalities() -> set[int]:
-    """Retorna conjunto de municipios ja presentes no cache."""
-    if not CACHE_DIR.exists():
-        return set()
-
-    cached = set()
-    for f in CACHE_DIR.glob("*.parquet"):
-        try:
-            cod_ibge = int(f.stem)
-            cached.add(cod_ibge)
-        except ValueError:
-            continue
-
-    return cached
-
-
-def save_to_cache(record: dict, cod_ibge: int) -> None:
-    """Salva dados de um municipio no cache."""
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache_path = CACHE_DIR / f"{cod_ibge}.parquet"
-    df = pd.DataFrame([record])
-    df.to_parquet(cache_path, index=False)
-
-
-def load_from_cache(cod_ibge: int) -> dict | None:
-    """Carrega dados de um municipio do cache."""
-    cache_path = CACHE_DIR / f"{cod_ibge}.parquet"
-    if cache_path.exists():
-        df = pd.read_parquet(cache_path)
-        return df.iloc[0].to_dict()
-    return None
-
-
-def consolidate_cache() -> pd.DataFrame:
-    """Consolida todos os arquivos de cache em um unico DataFrame."""
-    if not CACHE_DIR.exists():
-        raise FileNotFoundError(f"Diretorio de cache nao encontrado: {CACHE_DIR}")
-
-    all_records = []
-    for f in CACHE_DIR.glob("*.parquet"):
-        try:
-            df = pd.read_parquet(f)
-            all_records.append(df)
-        except Exception as e:
-            logger.warning(f"Erro ao ler {f}: {e}")
-
-    if not all_records:
-        raise ValueError("Nenhum arquivo de cache encontrado")
-
-    df = pd.concat(all_records, ignore_index=True)
-    return df
-
-
 def aggregate_depths(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     """Agrega propriedades do solo por camadas (superficial e subsuperficial)."""
     aggregation = config["aggregation"]
@@ -276,8 +197,13 @@ def aggregate_depths(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 
         surface_cols = [f"{prop}_{d}" for d in surface_depths if f"{prop}_{d}" in df.columns]
         if surface_cols:
+            # Pesos proporcionais a espessura da camada (cm)
             weights = {"0-5cm": 5, "5-15cm": 10, "15-30cm": 15}
-            total_weight = sum(weights.get(d.split("_")[-1], 1) for d in surface_depths if f"{prop}_{d.split('_')[-1]}" in surface_cols)
+            total_weight = sum(
+                weights.get(d.split("_")[-1], 1)
+                for d in surface_depths
+                if f"{prop}_{d.split('_')[-1]}" in surface_cols
+            )
 
             weighted_sum = 0
             for col in surface_cols:
@@ -285,7 +211,9 @@ def aggregate_depths(df: pd.DataFrame, config: dict) -> pd.DataFrame:
                 w = weights.get(depth, 1)
                 weighted_sum += df[col].fillna(0) * w
 
-            result[f"{prop}_{surface_label}"] = weighted_sum / total_weight if total_weight > 0 else None
+            result[f"{prop}_{surface_label}"] = (
+                weighted_sum / total_weight if total_weight > 0 else None
+            )
 
         subsurface_cfg = aggregation["subsurface"]
         subsurface_depths = subsurface_cfg["depths"]
@@ -293,8 +221,13 @@ def aggregate_depths(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 
         subsurface_cols = [f"{prop}_{d}" for d in subsurface_depths if f"{prop}_{d}" in df.columns]
         if subsurface_cols:
+            # Pesos proporcionais a espessura da camada (cm)
             weights = {"30-60cm": 30, "60-100cm": 40}
-            total_weight = sum(weights.get(d.split("_")[-1], 1) for d in subsurface_depths if f"{prop}_{d.split('_')[-1]}" in subsurface_cols)
+            total_weight = sum(
+                weights.get(d.split("_")[-1], 1)
+                for d in subsurface_depths
+                if f"{prop}_{d.split('_')[-1]}" in subsurface_cols
+            )
 
             weighted_sum = 0
             for col in subsurface_cols:
@@ -302,7 +235,9 @@ def aggregate_depths(df: pd.DataFrame, config: dict) -> pd.DataFrame:
                 w = weights.get(depth, 1)
                 weighted_sum += df[col].fillna(0) * w
 
-            result[f"{prop}_{subsurface_label}"] = weighted_sum / total_weight if total_weight > 0 else None
+            result[f"{prop}_{subsurface_label}"] = (
+                weighted_sum / total_weight if total_weight > 0 else None
+            )
 
     df_agg = pd.DataFrame(result)
 
@@ -340,6 +275,7 @@ def calculate_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     if "clay_0_30cm" in df.columns and "sand_0_30cm" in df.columns:
         clay_pct = df["clay_0_30cm"]
         sand_pct = df["sand_0_30cm"]
+        # Pedotransfer function (Rawls et al., 1982) — AWC estimada em mm
         df["awc_estimated"] = (0.76 * clay_pct - 0.4 * sand_pct + 25).clip(lower=5, upper=25)
 
     if "phh2o_0_30cm" in df.columns:
@@ -351,18 +287,19 @@ def calculate_derived_features(df: pd.DataFrame) -> pd.DataFrame:
             df["sand_0_30cm"] >= 70,
         ]
         choices = ["clayey", "sandy"]
-        df["texture_class"] = pd.Series(
-            ["loamy"] * len(df),
-            index=df.index
-        )
+        df["texture_class"] = pd.Series(["loamy"] * len(df), index=df.index)
         for cond, choice in zip(conditions, choices):
             df.loc[cond, "texture_class"] = choice
 
     if all(col in df.columns for col in ["soc_0_30cm", "phh2o_0_30cm", "cec_0_30cm"]):
-        soc_norm = (df["soc_0_30cm"] - df["soc_0_30cm"].min()) / (df["soc_0_30cm"].max() - df["soc_0_30cm"].min() + 0.001)
+        soc_norm = (df["soc_0_30cm"] - df["soc_0_30cm"].min()) / (
+            df["soc_0_30cm"].max() - df["soc_0_30cm"].min() + 0.001
+        )
         ph_norm = 1 - abs(df["phh2o_0_30cm"] - 6.2) / 3.0
         ph_norm = ph_norm.clip(lower=0, upper=1)
-        cec_norm = (df["cec_0_30cm"] - df["cec_0_30cm"].min()) / (df["cec_0_30cm"].max() - df["cec_0_30cm"].min() + 0.001)
+        cec_norm = (df["cec_0_30cm"] - df["cec_0_30cm"].min()) / (
+            df["cec_0_30cm"].max() - df["cec_0_30cm"].min() + 0.001
+        )
 
         df["soil_quality_index"] = 0.4 * soc_norm + 0.3 * ph_norm + 0.3 * cec_norm
 
@@ -397,7 +334,7 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
     logger.info("INGESTAO SOLO - SOILGRIDS")
     logger.info("=" * 60)
 
-    config = load_config()
+    config = load_config("soil", section="soil")
     logger.info(f"Propriedades: {config['properties']}")
     logger.info(f"Profundidades: {config['depths']}")
 
@@ -413,7 +350,7 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
         df_mun = df_mun.head(max_municipalities)
         logger.info(f"Limitado a {max_municipalities} municipios para teste")
 
-    cached = get_cached_municipalities()
+    cached = get_cached_codes(CACHE_DIR)
     logger.info(f"Municipios ja em cache: {len(cached):,}")
 
     pending = df_mun[~df_mun["cod_ibge"].isin(cached)]
@@ -434,7 +371,7 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
         record = download_soil_for_municipality(cod_ibge, lat, lon, config)
 
         if record is not None:
-            save_to_cache(record, cod_ibge)
+            save_to_cache(record, cod_ibge, CACHE_DIR)
             success += 1
             n_props = len([k for k in record if k != "cod_ibge"])
             logger.info(
@@ -457,7 +394,7 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
         logger.info(f"Municipios com falha (primeiros 20): {failed_list[:20]}")
 
     logger.info("\nConsolidando cache...")
-    df_raw = consolidate_cache()
+    df_raw = consolidate_cache(CACHE_DIR)
     logger.info(f"Registros consolidados: {len(df_raw):,}")
 
     logger.info("\nAgregando profundidades...")
@@ -479,7 +416,9 @@ def main(only_soy_producers: bool = True, max_municipalities: int | None = None)
     for col in ["clay_0_30cm", "sand_0_30cm", "phh2o_0_30cm", "soc_0_30cm"]:
         if col in stats:
             s = stats[col]
-            logger.info(f"{col}: min={s['min']:.1f}, max={s['max']:.1f}, mean={s['mean']:.1f}, nulls={s['nulls']}")
+            logger.info(
+                f"{col}: min={s['min']:.1f}, max={s['max']:.1f}, mean={s['mean']:.1f}, nulls={s['nulls']}"
+            )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df_final.to_parquet(OUTPUT_PATH, index=False)

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 from numpy.typing import ArrayLike
+
+logger = logging.getLogger(__name__)
 
 
 def mae(y_true: ArrayLike, y_pred: ArrayLike) -> float:
@@ -48,10 +52,11 @@ def compute_all_metrics(y_true: ArrayLike, y_pred: ArrayLike) -> dict[str, float
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     y_true = [3000, 3200, 2800, 3100, 2900]
     y_pred = [2900, 3100, 2700, 3000, 3000]
 
     metrics = compute_all_metrics(y_true, y_pred)
-    print("Teste de metricas:")
+    logger.info("Teste de metricas:")
     for k, v in metrics.items():
-        print(f"  {k}: {v}")
+        logger.info(f"  {k}: {v}")

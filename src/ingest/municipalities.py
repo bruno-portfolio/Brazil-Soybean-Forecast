@@ -1,8 +1,10 @@
+import logging
 from pathlib import Path
 
 import pandas as pd
 import yaml
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: Path | None = None) -> dict:
@@ -198,10 +200,7 @@ def process_municipalities(output_path: Path | None = None) -> pd.DataFrame:
 
 def main():
     """Ponto de entrada para execucao via CLI."""
-    import sys
-
-    logger.remove()
-    logger.add(sys.stderr, level="INFO")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
     try:
         process_municipalities()

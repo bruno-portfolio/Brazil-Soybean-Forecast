@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from src.evaluation.metrics import compute_all_metrics
 from src.modeling.split import TemporalSplit, create_temporal_split
@@ -98,20 +101,20 @@ def save_results(results: dict[str, BaselineResults], path: Path | None = None) 
 
 def print_comparison_table(results: dict[str, BaselineResults]) -> None:
     """Imprime tabela comparativa dos baselines."""
-    print("\n" + "=" * 80)
-    print("COMPARACAO DE BASELINES")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("COMPARACAO DE BASELINES")
+    logger.info("=" * 80)
 
-    print(
+    logger.info(
         f"\n{'Baseline':<15} | {'Split':<10} | "
         f"{'MAE (kg/ha)':<12} | {'MAE (sc/ha)':<12} | "
         f"{'RMSE (kg/ha)':<12} | {'MAPE (%)':<10} | {'N':<8}"
     )
-    print("-" * 95)
+    logger.info("-" * 95)
 
     for name, result in results.items():
         vm = result.validation_metrics
-        print(
+        logger.info(
             f"{name:<15} | {'Validacao':<10} | "
             f"{vm['mae_kg_ha']:>11.1f} | {vm['mae_sacas_ha']:>11.2f} | "
             f"{vm['rmse_kg_ha']:>11.1f} | {vm['mape_percent']:>9.2f} | "
@@ -119,66 +122,69 @@ def print_comparison_table(results: dict[str, BaselineResults]) -> None:
         )
 
         tm = result.test_metrics
-        print(
+        logger.info(
             f"{'':<15} | {'Teste':<10} | "
             f"{tm['mae_kg_ha']:>11.1f} | {tm['mae_sacas_ha']:>11.2f} | "
             f"{tm['rmse_kg_ha']:>11.1f} | {tm['mape_percent']:>9.2f} | "
             f"{tm['n_samples']:>7,}"
         )
-        print("-" * 95)
+        logger.info("-" * 95)
 
 
 def main() -> None:
     """Pipeline principal de avaliacao de baselines."""
-    print("=" * 60)
-    print("AVALIACAO DE BASELINES")
-    print("=" * 60)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logger.info("=" * 60)
+    logger.info("AVALIACAO DE BASELINES")
+    logger.info("=" * 60)
 
-    print("\nCarregando dados e criando split temporal...")
+    logger.info("\nCarregando dados e criando split temporal...")
     split = create_temporal_split()
 
     summary = split.summary()
-    print("\nSplit temporal:")
+    logger.info("\nSplit temporal:")
     for name, stats in summary.items():
-        print(f"  {name}: {stats['n_samples']:,} amostras ({stats['year_range']})")
+        logger.info(f"  {name}: {stats['n_samples']:,} amostras ({stats['year_range']})")
 
-    print("\nAvaliando baselines...")
+    logger.info("\nAvaliando baselines...")
     results = evaluate_all_baselines(split)
 
     print_comparison_table(results)
 
-    print("\n" + "=" * 60)
-    print("ANALISE DETALHADA")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("ANALISE DETALHADA")
+    logger.info("=" * 60)
 
     for name, result in results.items():
-        print(f"\n{name.upper()}:")
-        print(f"  Cobertura validacao: {result.validation_coverage}%")
-        print(f"  Cobertura teste: {result.test_coverage}%")
+        logger.info(f"\n{name.upper()}:")
+        logger.info(f"  Cobertura validacao: {result.validation_coverage}%")
+        logger.info(f"  Cobertura teste: {result.test_coverage}%")
 
     best_val = min(results.items(), key=lambda x: x[1].validation_metrics["mae_kg_ha"])
     best_test = min(results.items(), key=lambda x: x[1].test_metrics["mae_kg_ha"])
 
-    print("\n" + "=" * 60)
-    print("MELHOR BASELINE")
-    print("=" * 60)
-    print(
+    logger.info("\n" + "=" * 60)
+    logger.info("MELHOR BASELINE")
+    logger.info("=" * 60)
+    logger.info(
         f"\n  Por validacao: {best_val[0]} (MAE = {best_val[1].validation_metrics['mae_kg_ha']:.1f} kg/ha)"
     )
-    print(f"  Por teste: {best_test[0]} (MAE = {best_test[1].test_metrics['mae_kg_ha']:.1f} kg/ha)")
+    logger.info(
+        f"  Por teste: {best_test[0]} (MAE = {best_test[1].test_metrics['mae_kg_ha']:.1f} kg/ha)"
+    )
 
-    print("\n" + "=" * 60)
-    print("SALVANDO RESULTADOS")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("SALVANDO RESULTADOS")
+    logger.info("=" * 60)
     output_path = save_results(results)
-    print(f"\n  Arquivo salvo: {output_path}")
+    logger.info(f"\n  Arquivo salvo: {output_path}")
 
-    print("\n" + "=" * 60)
-    print("META PARA O MODELO PRINCIPAL")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("META PARA O MODELO PRINCIPAL")
+    logger.info("=" * 60)
     best_mae = best_test[1].test_metrics["mae_kg_ha"]
-    print(f"\n  O modelo principal deve superar MAE < {best_mae:.1f} kg/ha no teste")
-    print(f"  (equivalente a < {best_mae/60:.2f} sacas/ha)")
+    logger.info(f"\n  O modelo principal deve superar MAE < {best_mae:.1f} kg/ha no teste")
+    logger.info(f"  (equivalente a < {best_mae / 60:.2f} sacas/ha)")
 
 
 if __name__ == "__main__":

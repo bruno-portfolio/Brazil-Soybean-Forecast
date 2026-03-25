@@ -2,29 +2,14 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-import yaml
+
+from src.common.io import PROJECT_ROOT, load_config
+from src.common.phenology import assign_crop_year
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "ndvi.yaml"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "ndvi_safra.parquet"
-
-
-def load_config() -> dict:
-    """Carrega configuracao."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        return yaml.safe_load(f)["ndvi"]
-
-
-def assign_crop_year(date: pd.Timestamp, start_month: int = 10, end_month: int = 3) -> int:
-    """Atribui ano da safra (ano da colheita)."""
-    if date.month >= start_month:
-        return date.year + 1
-    elif date.month <= end_month:
-        return date.year
-    return None
 
 
 def assign_phase(month: int, phases: dict) -> str:
@@ -40,21 +25,17 @@ def process_appeears_csv(input_path: str, config: dict) -> pd.DataFrame:
     logger.info(f"Carregando {input_path}...")
     df = pd.read_csv(input_path)
 
-    ndvi_col = [c for c in df.columns if 'NDVI' in c.upper()][0]
+    ndvi_col = [c for c in df.columns if "NDVI" in c.upper()][0]
 
-    df = df.rename(columns={
-        'ID': 'cod_ibge',
-        'Date': 'date',
-        ndvi_col: 'ndvi_raw'
-    })
+    df = df.rename(columns={"ID": "cod_ibge", "Date": "date", ndvi_col: "ndvi_raw"})
 
-    df['date'] = pd.to_datetime(df['date'])
-    df['cod_ibge'] = df['cod_ibge'].astype(int)
+    df["date"] = pd.to_datetime(df["date"])
+    df["cod_ibge"] = df["cod_ibge"].astype(int)
 
-    scale = config.get('scale', {}).get('factor', 0.0001)
-    df['ndvi'] = df['ndvi_raw'] * scale
+    scale = config.get("scale", {}).get("factor", 0.0001)
+    df["ndvi"] = df["ndvi_raw"] * scale
 
-    df = df[(df['ndvi'] >= -1) & (df['ndvi'] <= 1)]
+    df = df[(df["ndvi"] >= -1) & (df["ndvi"] <= 1)]
 
     logger.info(f"Registros validos: {len(df):,}")
     return df
@@ -64,37 +45,37 @@ def aggregate_ndvi_by_safra(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     """Agrega NDVI por municipio e safra."""
     logger.info("Agregando NDVI por safra...")
 
-    agg = config['aggregation']
-    start_month = agg['start_month']
-    end_month = agg['end_month']
-    phases = agg['phases']
+    agg = config["aggregation"]
+    start_month = agg["start_month"]
+    end_month = agg["end_month"]
+    phases = agg["phases"]
 
-    df['month'] = df['date'].dt.month
-    mask = (df['month'] >= start_month) | (df['month'] <= end_month)
+    df["month"] = df["date"].dt.month
+    mask = (df["month"] >= start_month) | (df["month"] <= end_month)
     df = df[mask].copy()
 
-    df['ano'] = df['date'].apply(lambda x: assign_crop_year(x, start_month, end_month))
-    df['phase'] = df['month'].apply(lambda x: assign_phase(x, phases))
-    df = df.dropna(subset=['ano'])
-    df['ano'] = df['ano'].astype(int)
+    df["ano"] = df["date"].apply(lambda x: assign_crop_year(x, start_month, end_month))
+    df["phase"] = df["month"].apply(lambda x: assign_phase(x, phases))
+    df = df.dropna(subset=["ano"])
+    df["ano"] = df["ano"].astype(int)
 
     results = []
-    for (cod_ibge, ano), group in df.groupby(['cod_ibge', 'ano']):
+    for (cod_ibge, ano), group in df.groupby(["cod_ibge", "ano"]):
         record = {
-            'cod_ibge': cod_ibge,
-            'ano': ano,
-            'ndvi_mean_safra': group['ndvi'].mean(),
-            'ndvi_max_safra': group['ndvi'].max(),
-            'ndvi_min_safra': group['ndvi'].min(),
-            'ndvi_amplitude': group['ndvi'].max() - group['ndvi'].min(),
+            "cod_ibge": cod_ibge,
+            "ano": ano,
+            "ndvi_mean_safra": group["ndvi"].mean(),
+            "ndvi_max_safra": group["ndvi"].max(),
+            "ndvi_min_safra": group["ndvi"].min(),
+            "ndvi_amplitude": group["ndvi"].max() - group["ndvi"].min(),
         }
 
-        for phase in ['vegetativo', 'enchimento']:
-            phase_data = group[group['phase'] == phase]
+        for phase in ["vegetativo", "enchimento"]:
+            phase_data = group[group["phase"] == phase]
             if len(phase_data) > 0:
-                record[f'ndvi_{phase}'] = phase_data['ndvi'].mean()
+                record[f"ndvi_{phase}"] = phase_data["ndvi"].mean()
             else:
-                record[f'ndvi_{phase}'] = None
+                record[f"ndvi_{phase}"] = None
 
         results.append(record)
 
@@ -109,10 +90,10 @@ def main(input_file: str = None):
     logger.info("PROCESSAMENTO NDVI - AppEEARS")
     logger.info("=" * 60)
 
-    config = load_config()
+    config = load_config("ndvi", section="ndvi")
 
     if input_file is None:
-        input_file = PROJECT_ROOT / config['input']['file']
+        input_file = PROJECT_ROOT / config["input"]["file"]
 
     if not Path(input_file).exists():
         logger.error(f"Arquivo nao encontrado: {input_file}")

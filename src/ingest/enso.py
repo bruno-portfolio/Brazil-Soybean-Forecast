@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 import pandas as pd
 import requests
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "data" / "processed"
@@ -19,8 +22,8 @@ def download_oni_data() -> pd.DataFrame:
     try:
         return _download_oni_ascii()
     except Exception as e:
-        print(f"Falha no download ASCII: {e}")
-        print("Tentando parse da tabela HTML...")
+        logger.warning(f"Falha no download ASCII: {e}")
+        logger.info("Tentando parse da tabela HTML...")
         return _download_oni_html()
 
 
@@ -180,14 +183,14 @@ def calculate_oni_for_crop_year(
 
 def process_oni_data() -> pd.DataFrame:
     """Processa dados ONI e gera DataFrame por ano de safra."""
-    print("Baixando dados ONI da NOAA...")
+    logger.info("Baixando dados ONI da NOAA...")
 
     try:
         oni_df = download_oni_data()
-        print(f"  Download OK: {len(oni_df)} registros")
+        logger.info(f"  Download OK: {len(oni_df)} registros")
     except Exception as e:
-        print(f"  Falha no download: {e}")
-        print("  Usando dados hardcoded...")
+        logger.warning(f"  Falha no download: {e}")
+        logger.info("  Usando dados hardcoded...")
         oni_df = create_oni_from_hardcoded()
 
     crop_years = range(2000, 2026)
@@ -208,9 +211,9 @@ def process_oni_data() -> pd.DataFrame:
 
 def main() -> None:
     """Pipeline principal de ingestao do ONI."""
-    print("=" * 60)
-    print("INGESTAO DO INDICE ONI (ENSO)")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("INGESTAO DO INDICE ONI (ENSO)")
+    logger.info("=" * 60)
 
     df = process_oni_data()
 
@@ -218,15 +221,15 @@ def main() -> None:
     output_path = DATA_PATH / "oni_enso.parquet"
     df.to_parquet(output_path, index=False)
 
-    print(f"\nArquivo salvo: {output_path}")
-    print(f"Safras: {df['ano'].min()} - {df['ano'].max()}")
+    logger.info(f"\nArquivo salvo: {output_path}")
+    logger.info(f"Safras: {df['ano'].min()} - {df['ano'].max()}")
 
-    print("\nResumo por fase ENSO:")
-    print(df.groupby("enso_phase").size())
+    logger.info("\nResumo por fase ENSO:")
+    logger.info(df.groupby("enso_phase").size())
 
-    print("\nAnos com ENSO mais intenso:")
-    print(df.nlargest(5, "oni_avg")[["ano", "oni_avg", "enso_phase"]])
-    print(df.nsmallest(5, "oni_avg")[["ano", "oni_avg", "enso_phase"]])
+    logger.info("\nAnos com ENSO mais intenso:")
+    logger.info(df.nlargest(5, "oni_avg")[["ano", "oni_avg", "enso_phase"]])
+    logger.info(df.nsmallest(5, "oni_avg")[["ano", "oni_avg", "enso_phase"]])
 
 
 if __name__ == "__main__":

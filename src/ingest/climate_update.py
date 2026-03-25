@@ -2,40 +2,24 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 
 import pandas as pd
 import requests
-import yaml
+
+from src.common.io import (
+    PROJECT_ROOT,
+    load_config,
+    load_municipalities,
+    load_target_municipalities,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "climate.yaml"
-MUNICIPALITIES_PATH = PROJECT_ROOT / "data" / "processed" / "municipalities.parquet"
-TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "climate"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
 
 NEW_PARAMETERS = ["ALLSKY_SFC_SW_DWN", "WS2M"]
-
-
-def load_config() -> dict:
-    """Carrega configuracao do climate.yaml."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        return yaml.safe_load(f)["climate"]
-
-
-def load_municipalities() -> pd.DataFrame:
-    """Carrega tabela de municipios."""
-    return pd.read_parquet(MUNICIPALITIES_PATH)
-
-
-def load_target_municipalities() -> set[int]:
-    """Carrega lista de municipios que produzem soja."""
-    df = pd.read_parquet(TARGET_PATH)
-    return set(df["cod_ibge"].unique())
 
 
 def download_new_params(cod_ibge: int, lat: float, lon: float, config: dict) -> pd.DataFrame | None:
@@ -80,10 +64,12 @@ def download_new_params(cod_ibge: int, lat: float, lon: float, config: dict) -> 
         df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
         df["cod_ibge"] = cod_ibge
 
-        df = df.rename(columns={
-            "ALLSKY_SFC_SW_DWN": "radiation",
-            "WS2M": "wind_speed",
-        })
+        df = df.rename(
+            columns={
+                "ALLSKY_SFC_SW_DWN": "radiation",
+                "WS2M": "wind_speed",
+            }
+        )
 
         return df
 
@@ -98,7 +84,7 @@ def update_climate_cache():
     logger.info("ATUALIZACAO CLIMA - Radiacao e Vento")
     logger.info("=" * 60)
 
-    config = load_config()
+    config = load_config("climate", section="climate")
     df_mun = load_municipalities()
     soy_producers = load_target_municipalities()
     df_mun = df_mun[df_mun["cod_ibge"].isin(soy_producers)]
@@ -172,13 +158,13 @@ def merge_climate_data():
     df_original["date"] = pd.to_datetime(df_original["date"])
 
     df_merged = df_original.merge(
-        df_new[["cod_ibge", "date", "radiation", "wind_speed"]],
-        on=["cod_ibge", "date"],
-        how="left"
+        df_new[["cod_ibge", "date", "radiation", "wind_speed"]], on=["cod_ibge", "date"], how="left"
     )
 
     n_with_radiation = df_merged["radiation"].notna().sum()
-    logger.info(f"Registros com radiacao: {n_with_radiation:,} ({100*n_with_radiation/len(df_merged):.1f}%)")
+    logger.info(
+        f"Registros com radiacao: {n_with_radiation:,} ({100 * n_with_radiation / len(df_merged):.1f}%)"
+    )
 
     output_merged = PROJECT_ROOT / "data" / "processed" / "climate_daily_v2.parquet"
     df_merged.to_parquet(output_merged, index=False)

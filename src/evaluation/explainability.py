@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import pickle
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ import pandas as pd
 import shap
 
 from src.modeling.split import create_temporal_split, get_feature_columns
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 MODELS_PATH = PROJECT_ROOT / "models"
@@ -375,17 +378,17 @@ def generate_explainability_report(
 
 def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
     """Pipeline completo de analise de explicabilidade."""
-    print("=" * 60)
-    print("ANALISE DE EXPLICABILIDADE DO MODELO")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("ANALISE DE EXPLICABILIDADE DO MODELO")
+    logger.info("=" * 60)
 
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
-    print("\nCarregando modelo...")
+    logger.info("Carregando modelo...")
     model = load_model(model_version)
     metadata = load_model_metadata(model_version)
 
-    print("Carregando dados...")
+    logger.info("Carregando dados...")
     split = create_temporal_split()
 
     feature_cols = get_feature_columns(split.train)
@@ -394,19 +397,19 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
     X_val, y_val = prepare_data_for_explanation(split.validation, feature_cols)
     X_test, y_test = prepare_data_for_explanation(split.test, feature_cols)
 
-    print(f"  Amostras para analise: {len(X_train):,} (treino)")
+    logger.info(f"  Amostras para analise: {len(X_train):,} (treino)")
 
-    print("\n1. Gain Importance (do treinamento)...")
+    logger.info("1. Gain Importance (do treinamento)...")
     gain_importance = metadata["feature_importance"]
-    print("   Gain importance carregado.")
+    logger.info("   Gain importance carregado.")
 
-    print("\n2. Calculando Permutation Importance (pode demorar)...")
+    logger.info("2. Calculando Permutation Importance (pode demorar)...")
     perm_importance = calculate_permutation_importance(model, X_val, y_val, n_repeats=10)
-    print("   Permutation importance calculado.")
+    logger.info("   Permutation importance calculado.")
 
-    print("\n3. Calculando SHAP values...")
+    logger.info("3. Calculando SHAP values...")
     explainer, shap_values, X_sample = calculate_shap_values(model, X_train, max_samples=5000)
-    print(f"   SHAP calculado para {len(X_sample):,} amostras.")
+    logger.info(f"   SHAP calculado para {len(X_sample):,} amostras.")
 
     shap_importance = dict(
         zip(
@@ -416,16 +419,16 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
     )
     shap_importance = dict(sorted(shap_importance.items(), key=lambda x: x[1], reverse=True))
 
-    print("\n4. Gerando graficos SHAP...")
+    logger.info("4. Gerando graficos SHAP...")
 
-    print("   - SHAP summary plot...")
+    logger.info("   - SHAP summary plot...")
     create_shap_summary_plot(
         shap_values,
         X_sample,
         RESULTS_PATH / "shap_summary.png",
     )
 
-    print("   - SHAP bar plot...")
+    logger.info("   - SHAP bar plot...")
     create_shap_bar_plot(
         shap_values,
         X_sample,
@@ -435,7 +438,7 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
     climate_features = ["precip_total_mm", "hot_days_count", "gdd_accumulated", "tmin_avg"]
     for feature in climate_features:
         if feature in X_sample.columns:
-            print(f"   - Dependence plot: {feature}...")
+            logger.info(f"   - Dependence plot: {feature}...")
             create_dependence_plot(
                 shap_values,
                 X_sample,
@@ -443,7 +446,7 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
                 RESULTS_PATH / f"shap_dependence_{feature.replace('_', '')[:15]}.png",
             )
 
-    print("\n5. Exportando feature importance CSV...")
+    logger.info("5. Exportando feature importance CSV...")
     export_feature_importance_csv(
         gain_importance,
         perm_importance,
@@ -451,10 +454,10 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
         RESULTS_PATH / "feature_importance.csv",
     )
 
-    print("\n6. Analisando coerencia agronomica...")
+    logger.info("6. Analisando coerencia agronomica...")
     coherence_analysis = analyze_agronomic_coherence(shap_values, X_sample)
 
-    print("\n7. Gerando relatorio de explicabilidade...")
+    logger.info("7. Gerando relatorio de explicabilidade...")
     generate_explainability_report(
         gain_importance,
         perm_importance,
@@ -463,29 +466,29 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
         RESULTS_PATH / "explainability_report.md",
     )
 
-    print("\n" + "=" * 60)
-    print("RESUMO DA ANALISE")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("RESUMO DA ANALISE")
+    logger.info("=" * 60)
 
-    print("\nRanking de Features (Gain %):")
+    logger.info("Ranking de Features (Gain %):")
     total_gain = sum(gain_importance.values())
     for i, (feat, imp) in enumerate(gain_importance.items()):
         pct = imp / total_gain * 100
-        print(f"  {i+1}. {feat}: {pct:.1f}%")
+        logger.info(f"  {i + 1}. {feat}: {pct:.1f}%")
 
-    print("\nCoerencia Agronomica:")
+    logger.info("Coerencia Agronomica:")
     coherent = sum(1 for a in coherence_analysis.values() if a["coherence"] == "coerente")
     nonlinear = sum(1 for a in coherence_analysis.values() if "nao-linear" in a["coherence"])
     investigate = sum(1 for a in coherence_analysis.values() if a["coherence"] == "investigar")
-    print(f"  - Coerentes: {coherent}")
-    print(f"  - Nao-lineares: {nonlinear}")
-    print(f"  - A investigar: {investigate}")
+    logger.info(f"  - Coerentes: {coherent}")
+    logger.info(f"  - Nao-lineares: {nonlinear}")
+    logger.info(f"  - A investigar: {investigate}")
 
-    print("\nArquivos gerados:")
-    print(f"  - {RESULTS_PATH / 'shap_summary.png'}")
-    print(f"  - {RESULTS_PATH / 'shap_bar.png'}")
-    print(f"  - {RESULTS_PATH / 'feature_importance.csv'}")
-    print(f"  - {RESULTS_PATH / 'explainability_report.md'}")
+    logger.info("Arquivos gerados:")
+    logger.info(f"  - {RESULTS_PATH / 'shap_summary.png'}")
+    logger.info(f"  - {RESULTS_PATH / 'shap_bar.png'}")
+    logger.info(f"  - {RESULTS_PATH / 'feature_importance.csv'}")
+    logger.info(f"  - {RESULTS_PATH / 'explainability_report.md'}")
 
     results = {
         "model_version": model_version,
@@ -500,13 +503,14 @@ def run_explainability_analysis(model_version: str = "v1") -> dict[str, Any]:
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2, default=float)
 
-    print(f"  - {results_path}")
+    logger.info(f"  - {results_path}")
 
     return results
 
 
 def main() -> None:
     """Pipeline principal de explicabilidade."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     run_explainability_analysis(model_version="v1")
 
 

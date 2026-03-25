@@ -1,28 +1,28 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+import os
 from typing import Any
 
 import pandas as pd
 
+from src.common.io import PROJECT_ROOT, load_municipalities, load_target_municipalities
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-MUNICIPALITIES_PATH = PROJECT_ROOT / "data" / "processed" / "municipalities.parquet"
-TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "ndvi_safra.parquet"
 
 try:
     import ee
+
     GEE_AVAILABLE = True
 except ImportError:
     GEE_AVAILABLE = False
     logger.warning("earthengine-api nao instalado. Execute: pip install earthengine-api")
 
 
-GEE_PROJECT = "teste-483217"
+GEE_PROJECT = os.environ.get("GEE_PROJECT", "teste-483217")
 
 
 def initialize_gee(project_id: str | None = None) -> bool:
@@ -41,17 +41,6 @@ def initialize_gee(project_id: str | None = None) -> bool:
         return False
 
 
-def load_municipalities() -> pd.DataFrame:
-    """Carrega municipios."""
-    return pd.read_parquet(MUNICIPALITIES_PATH)
-
-
-def load_target_municipalities() -> set[int]:
-    """Carrega lista de municipios produtores de soja."""
-    df = pd.read_parquet(TARGET_PATH)
-    return set(df["cod_ibge"].unique())
-
-
 def get_ndvi_for_point(lon: float, lat: float, start_date: str, end_date: str) -> dict[str, Any]:
     """Extrai NDVI medio para um ponto usando MODIS MOD13Q1."""
     point = ee.Geometry.Point([lon, lat])
@@ -64,11 +53,7 @@ def get_ndvi_for_point(lon: float, lat: float, start_date: str, end_date: str) -
     )
 
     def extract_value(image):
-        value = image.reduceRegion(
-            reducer=ee.Reducer.mean(),
-            geometry=point,
-            scale=250
-        ).get("NDVI")
+        value = image.reduceRegion(reducer=ee.Reducer.mean(), geometry=point, scale=250).get("NDVI")
         return image.set("ndvi_value", value)
 
     with_values = collection.map(extract_value)
@@ -78,34 +63,27 @@ def get_ndvi_for_point(lon: float, lat: float, start_date: str, end_date: str) -
     valid_values = [v * 0.0001 for v in values if v is not None]
 
     if not valid_values:
-        return {
-            "ndvi_mean": None,
-            "ndvi_max": None,
-            "ndvi_min": None,
-            "ndvi_count": 0
-        }
+        return {"ndvi_mean": None, "ndvi_max": None, "ndvi_min": None, "ndvi_count": 0}
 
     return {
         "ndvi_mean": sum(valid_values) / len(valid_values),
         "ndvi_max": max(valid_values),
         "ndvi_min": min(valid_values),
-        "ndvi_count": len(valid_values)
+        "ndvi_count": len(valid_values),
     }
 
 
-def get_ndvi_by_phase(
-    lon: float, lat: float, year: int
-) -> dict[str, float | None]:
+def get_ndvi_by_phase(lon: float, lat: float, year: int) -> dict[str, float | None]:
     """Extrai NDVI por fase fenologica para uma safra."""
     phases = {
-        "plantio": (f"{year-1}-10-01", f"{year-1}-11-30"),
-        "vegetativo": (f"{year-1}-12-01", f"{year}-01-31"),
+        "plantio": (f"{year - 1}-10-01", f"{year - 1}-11-30"),
+        "vegetativo": (f"{year - 1}-12-01", f"{year}-01-31"),
         "enchimento": (f"{year}-02-01", f"{year}-03-31"),
     }
 
     results = {}
 
-    safra_start = f"{year-1}-10-01"
+    safra_start = f"{year - 1}-10-01"
     safra_end = f"{year}-03-31"
     safra_ndvi = get_ndvi_for_point(lon, lat, safra_start, safra_end)
 
@@ -126,9 +104,7 @@ def get_ndvi_by_phase(
 
 
 def process_all_municipalities(
-    years: list[int] | None = None,
-    max_municipalities: int | None = None,
-    batch_size: int = 100
+    years: list[int] | None = None, max_municipalities: int | None = None, batch_size: int = 100
 ) -> pd.DataFrame:
     """Processa NDVI para todos os municipios."""
     if not initialize_gee():
@@ -204,9 +180,7 @@ def main():
     logger.info("=" * 60)
 
     df = process_all_municipalities(
-        years=list(range(2000, 2026)),
-        max_municipalities=None,
-        batch_size=50
+        years=list(range(2000, 2026)), max_municipalities=None, batch_size=50
     )
 
     logger.info("\nEstatisticas:")

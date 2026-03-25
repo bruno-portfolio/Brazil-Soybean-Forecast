@@ -1,18 +1,23 @@
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import yaml
+
+from src.common.constants import REGION_SUL
+from src.common.io import PROJECT_ROOT, load_config
+from src.common.phenology import (
+    assign_crop_year,
+    assign_phenology_phase,
+    calculate_dry_spell_metrics,
+    calculate_gdd,
+    calculate_precip_variability,
+)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "features.yaml"
 CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
 CLIMATE_V2_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily_v2.parquet"
 TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
@@ -22,12 +27,6 @@ NDVI_PATH = PROJECT_ROOT / "data" / "processed" / "ndvi_safra.parquet"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final.parquet"
 
 LATITUDE_DEFAULT = -15.0
-
-
-def load_config() -> dict:
-    """Carrega configuracao de features do YAML."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def load_climate_data() -> pd.DataFrame:
@@ -66,9 +65,11 @@ def calculate_eto_hargreaves(row: pd.Series, lat: float = LATITUDE_DEFAULT) -> f
     delta = 0.409 * np.sin(2 * np.pi * day_of_year / 365 - 1.39)
     lat_rad = lat * np.pi / 180
     ws = np.arccos(-np.tan(lat_rad) * np.tan(delta))
-    Ra = (24 * 60 / np.pi) * 0.0820 * dr * (
-        ws * np.sin(lat_rad) * np.sin(delta) +
-        np.cos(lat_rad) * np.cos(delta) * np.sin(ws)
+    Ra = (
+        (24 * 60 / np.pi)
+        * 0.0820
+        * dr
+        * (ws * np.sin(lat_rad) * np.sin(delta) + np.cos(lat_rad) * np.cos(delta) * np.sin(ws))
     )
 
     eto = 0.0023 * (tmean + 17.8) * np.sqrt(max(0, tmax - tmin)) * Ra
@@ -131,7 +132,9 @@ def load_soil_data() -> pd.DataFrame:
         logger.info(f"  Municipios com dados de solo: {len(df):,}")
         return df
     else:
-        logger.warning("  Arquivo de solo nao encontrado. Execute src/ingest/soilgrids.py primeiro.")
+        logger.warning(
+            "  Arquivo de solo nao encontrado. Execute src/ingest/soilgrids.py primeiro."
+        )
         return None
 
 
@@ -160,7 +163,7 @@ def add_ndvi_features(df: pd.DataFrame, df_ndvi: pd.DataFrame) -> pd.DataFrame:
     ndvi_cols = [c for c in df_ndvi.columns if c.startswith("ndvi_")]
     if ndvi_cols:
         n_with_ndvi = df[ndvi_cols[0]].notna().sum()
-        logger.info(f"  Registros com NDVI: {n_with_ndvi:,} ({100*n_with_ndvi/len(df):.1f}%)")
+        logger.info(f"  Registros com NDVI: {n_with_ndvi:,} ({100 * n_with_ndvi / len(df):.1f}%)")
 
     return df
 
@@ -178,11 +181,6 @@ def add_ndvi_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
         logger.info("  ndvi_ench_x_la_nina adicionada")
 
     return df
-
-
-def calculate_gdd(row: pd.Series, base_temp: float) -> float:
-    """Calcula Growing Degree Days (GDD) para um dia."""
-    return max(0, row["tmean"] - base_temp)
 
 
 def get_regional_phenology(config: dict) -> dict:
@@ -210,19 +208,6 @@ def get_default_phenology(config: dict) -> dict:
     }
 
 
-def assign_crop_year(date: pd.Timestamp, start_month: int, end_month: int) -> int:
-    """Atribui o ano da safra para uma data."""
-    month = date.month
-    year = date.year
-
-    if month >= start_month:
-        return year + 1
-    elif month <= end_month:
-        return year
-    else:
-        return None
-
-
 def assign_phenology_phase_regional(date: pd.Timestamp, phases: dict) -> str:
     """Atribui a fase fenologica para uma data usando configuracao regional."""
     month = date.month
@@ -234,24 +219,8 @@ def assign_phenology_phase_regional(date: pd.Timestamp, phases: dict) -> str:
     return None
 
 
-def assign_phenology_phase(date: pd.Timestamp) -> str:
-    """Atribui a fase fenologica para uma data (versao default)."""
-    month = date.month
-
-    if month in [10, 11]:
-        return "plantio"
-    elif month in [12, 1]:
-        return "vegetativo"
-    elif month in [2, 3]:
-        return "enchimento"
-    else:
-        return None
-
-
 def filter_phenology_window(df: pd.DataFrame, start_month: int, end_month: int) -> pd.DataFrame:
-    """Filtra dados de clima para a janela fenologica (versao simples, default)."""
-    logger.info(f"Filtrando janela fenologica (mes {start_month} a {end_month})...")
-
+    """Filtra dados de clima para a janela fenologica default."""
     df = df.copy()
     df["month"] = df["date"].dt.month
 
@@ -265,11 +234,9 @@ def filter_phenology_window(df: pd.DataFrame, start_month: int, end_month: int) 
     df_filtered["crop_year"] = df_filtered["date"].apply(
         lambda x: assign_crop_year(x, start_month, end_month)
     )
-
     df_filtered["phase"] = df_filtered["date"].apply(assign_phenology_phase)
 
     logger.info(f"  Registros na janela: {len(df_filtered):,}")
-
     return df_filtered
 
 
@@ -337,59 +304,6 @@ def filter_phenology_window_regional(
             logger.info(f"    UF {uf}: meses {cfg['start_month']}-{cfg['end_month']}")
 
     return df_result
-
-
-def calculate_dry_spell_metrics(df_group: pd.DataFrame, threshold_mm: float = 2.0) -> dict:
-    """Calcula metricas de veranico para um grupo (municipio/safra)."""
-    if len(df_group) == 0:
-        return {
-            "dry_spell_max": 0,
-            "dry_spell_count_7d": 0,
-            "dry_spell_count_10d": 0,
-        }
-
-    df_sorted = df_group.sort_values("date")
-    precip = df_sorted["precip"].values
-
-    is_dry = precip < threshold_mm
-
-    dry_spells = []
-    current_spell = 0
-
-    for dry in is_dry:
-        if dry:
-            current_spell += 1
-        else:
-            if current_spell > 0:
-                dry_spells.append(current_spell)
-            current_spell = 0
-
-    if current_spell > 0:
-        dry_spells.append(current_spell)
-
-    return {
-        "dry_spell_max": max(dry_spells) if dry_spells else 0,
-        "dry_spell_count_7d": sum(1 for s in dry_spells if s >= 7),
-        "dry_spell_count_10d": sum(1 for s in dry_spells if s >= 10),
-    }
-
-
-def calculate_precip_variability(df_group: pd.DataFrame) -> dict:
-    """Calcula metricas de variabilidade da precipitacao."""
-    if len(df_group) == 0:
-        return {"precip_cv": 0, "precip_days_gt1mm": 0}
-
-    precip = df_group["precip"].values
-
-    mean_precip = precip.mean()
-    cv = precip.std() / mean_precip if mean_precip > 0 else 0
-
-    days_with_rain = (precip > 1.0).sum()
-
-    return {
-        "precip_cv": cv,
-        "precip_days_gt1mm": int(days_with_rain),
-    }
 
 
 def calculate_water_balance_metrics(df_group: pd.DataFrame) -> dict:
@@ -657,13 +571,17 @@ def add_enso_interactions(df: pd.DataFrame) -> pd.DataFrame:
     if "water_deficit_mm" in df.columns and "is_la_nina" in df.columns:
         deficit_norm = df["water_deficit_mm"] / (df["water_deficit_mm"].std() + 1e-8)
         df["la_nina_x_deficit"] = df["is_la_nina"] * deficit_norm
-        logger.info(f"  la_nina_x_deficit: range [{df['la_nina_x_deficit'].min():.2f}, {df['la_nina_x_deficit'].max():.2f}]")
+        logger.info(
+            f"  la_nina_x_deficit: range [{df['la_nina_x_deficit'].min():.2f}, {df['la_nina_x_deficit'].max():.2f}]"
+        )
 
     if "deficit_enchimento_mm" in df.columns and "hot_days_enchimento" in df.columns:
         deficit_ench_norm = df["deficit_enchimento_mm"] / (df["deficit_enchimento_mm"].std() + 1e-8)
         hot_ench_norm = df["hot_days_enchimento"] / (df["hot_days_enchimento"].std() + 1e-8)
         df["terminal_drought_stress"] = deficit_ench_norm * hot_ench_norm
-        logger.info(f"  terminal_drought_stress: range [{df['terminal_drought_stress'].min():.2f}, {df['terminal_drought_stress'].max():.2f}]")
+        logger.info(
+            f"  terminal_drought_stress: range [{df['terminal_drought_stress'].min():.2f}, {df['terminal_drought_stress'].max():.2f}]"
+        )
 
     logger.info("  Interacoes ENSO adicionadas")
 
@@ -678,9 +596,7 @@ def add_regional_features(df: pd.DataFrame) -> pd.DataFrame:
 
     df["uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
 
-    sul_ufs = [41, 42, 43]
-
-    df["is_sul"] = df["uf_cod"].isin(sul_ufs).astype(int)
+    df["is_sul"] = df["uf_cod"].isin(REGION_SUL).astype(int)
 
     if "is_la_nina" in df.columns:
         df["sul_x_la_nina"] = df["is_sul"] * df["is_la_nina"]
@@ -699,7 +615,7 @@ def add_regional_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.drop(columns=["uf_cod"])
 
     n_sul = df["is_sul"].sum()
-    logger.info(f"  Registros do Sul: {n_sul:,} ({n_sul/len(df)*100:.1f}%)")
+    logger.info(f"  Registros do Sul: {n_sul:,} ({n_sul / len(df) * 100:.1f}%)")
 
     return df
 
@@ -718,7 +634,9 @@ def add_soil_features(df: pd.DataFrame, df_soil: pd.DataFrame) -> pd.DataFrame:
     if soil_cols:
         n_with_soil = df[soil_cols[0]].notna().sum()
         n_total = len(df)
-        logger.info(f"  Registros com dados de solo: {n_with_soil:,} ({n_with_soil/n_total*100:.1f}%)")
+        logger.info(
+            f"  Registros com dados de solo: {n_with_soil:,} ({n_with_soil / n_total * 100:.1f}%)"
+        )
 
     logger.info(f"  Features de solo adicionadas: {len(soil_cols)}")
     for col in soil_cols[:5]:
@@ -782,9 +700,7 @@ def add_soil_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
         sand_norm = df["sand_0_30cm"] / 100
         df["sand_x_la_nina_sul"] = sand_norm * df["is_la_nina"] * df["is_sul"]
         interactions_added += 1
-        logger.info(
-            f"  sand_x_la_nina_sul: {(df['sand_x_la_nina_sul'] > 0).sum():,} casos"
-        )
+        logger.info(f"  sand_x_la_nina_sul: {(df['sand_x_la_nina_sul'] > 0).sum():,} casos")
 
     if "cec_0_30cm" in df.columns:
         cec_norm = (df["cec_0_30cm"] - df["cec_0_30cm"].min()) / (
@@ -798,7 +714,9 @@ def add_soil_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
         deficit_norm = df["water_deficit_mm"] / (df["water_deficit_mm"].std() + 1e-8)
         df["awc_x_deficit"] = (1 - awc_norm) * deficit_norm
         interactions_added += 1
-        logger.info(f"  awc_x_deficit: range [{df['awc_x_deficit'].min():.2f}, {df['awc_x_deficit'].max():.2f}]")
+        logger.info(
+            f"  awc_x_deficit: range [{df['awc_x_deficit'].min():.2f}, {df['awc_x_deficit'].max():.2f}]"
+        )
 
     if "sand_0_30cm" in df.columns and "water_deficit_mm" in df.columns:
         sand_norm = df["sand_0_30cm"] / 100
@@ -903,7 +821,7 @@ def main():
     logger.info("FEATURE ENGINEERING v2.0 (com Fase 1 de melhorias)")
     logger.info("=" * 60)
 
-    config = load_config()
+    config = load_config("features")
     default_phenology = get_default_phenology(config)
     regional_phenology = get_regional_phenology(config)
 
@@ -1135,7 +1053,7 @@ def main():
     logger.info("\nFeatures regionais Sul:")
     if "is_sul" in df.columns:
         n_sul = df["is_sul"].sum()
-        logger.info(f"  - is_sul: {n_sul:,} registros ({n_sul/len(df)*100:.1f}%)")
+        logger.info(f"  - is_sul: {n_sul:,} registros ({n_sul / len(df) * 100:.1f}%)")
     if "sul_x_la_nina" in df.columns:
         logger.info(f"  - sul_x_la_nina: {df['sul_x_la_nina'].sum():,} casos")
     if "sul_x_precip_anomaly" in df.columns:
@@ -1187,7 +1105,7 @@ def main():
     if "texture_class" in df.columns:
         logger.info("  - texture_class distribuicao:")
         for tex, count in df["texture_class"].value_counts().items():
-            logger.info(f"      {tex}: {count:,} ({count/len(df)*100:.1f}%)")
+            logger.info(f"      {tex}: {count:,} ({count / len(df) * 100:.1f}%)")
 
     logger.info("\nInteracoes solo x clima:")
     for col in soil_interaction_cols:

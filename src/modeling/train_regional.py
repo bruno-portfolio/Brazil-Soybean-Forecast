@@ -1,32 +1,27 @@
 from __future__ import annotations
 
 import json
+import logging
 import pickle
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import yaml
 
+from src.common.constants import REGION_SUL
+from src.common.io import PROJECT_ROOT
 from src.evaluation.metrics import compute_all_metrics
 from src.modeling.split import create_temporal_split, get_feature_columns
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "configs" / "model.yaml"
 MODELS_PATH = PROJECT_ROOT / "models"
 RESULTS_PATH = PROJECT_ROOT / "results"
-
-UF_CODES = {
-    "RS": 43,
-    "SC": 42,
-    "PR": 41,
-}
-
-REGION_SUL = [41, 42, 43]
 
 
 @dataclass
@@ -144,14 +139,14 @@ def train_regional_models() -> RegionalTrainingResult:
     """Pipeline de treinamento de modelos regionais."""
     start_time = time.time()
 
-    print("=" * 60)
-    print("TREINAMENTO DE MODELOS REGIONAIS")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("TREINAMENTO DE MODELOS REGIONAIS")
+    logger.info("=" * 60)
 
     config = load_config()
-    print(f"\nAlgoritmo: {config.algorithm}")
+    logger.info(f"\nAlgoritmo: {config.algorithm}")
 
-    print("\nCarregando dados...")
+    logger.info("\nCarregando dados...")
     split = create_temporal_split()
 
     split.train = add_region_column(split.train)
@@ -163,25 +158,25 @@ def train_regional_models() -> RegionalTrainingResult:
     features_to_exclude = ["uf_cod", "region"]
     feature_cols = [f for f in feature_cols if f not in features_to_exclude]
 
-    print(f"Features ({len(feature_cols)})")
+    logger.info(f"Features ({len(feature_cols)})")
 
-    print("\n" + "-" * 60)
-    print("TREINANDO MODELO SUL (RS, PR, SC)")
-    print("-" * 60)
+    logger.info("\n" + "-" * 60)
+    logger.info("TREINANDO MODELO SUL (RS, PR, SC)")
+    logger.info("-" * 60)
 
     train_sul = split.train[split.train["is_sul"] == 1]
     val_sul = split.validation[split.validation["is_sul"] == 1]
     test_sul = split.test[split.test["is_sul"] == 1]
 
-    print(f"  Treino Sul: {len(train_sul):,} amostras")
-    print(f"  Validacao Sul: {len(val_sul):,} amostras")
-    print(f"  Teste Sul: {len(test_sul):,} amostras")
+    logger.info(f"  Treino Sul: {len(train_sul):,} amostras")
+    logger.info(f"  Validacao Sul: {len(val_sul):,} amostras")
+    logger.info(f"  Teste Sul: {len(test_sul):,} amostras")
 
     X_train_sul, y_train_sul = prepare_data(train_sul, feature_cols)
     X_val_sul, y_val_sul = prepare_data(val_sul, feature_cols)
     X_test_sul, y_test_sul = prepare_data(test_sul, feature_cols)
 
-    print("\n  Treinando modelo Sul com params especificos...")
+    logger.info("\n  Treinando modelo Sul com params especificos...")
     model_sul, best_iter_sul = train_lightgbm(
         X_train_sul,
         y_train_sul,
@@ -192,34 +187,34 @@ def train_regional_models() -> RegionalTrainingResult:
         config.early_stopping_rounds,
         config.early_stopping_enabled,
     )
-    print(f"  Melhor iteracao: {best_iter_sul}")
+    logger.info(f"  Melhor iteracao: {best_iter_sul}")
 
     y_test_sul_pred = model_sul.predict(X_test_sul)
     test_metrics_sul = compute_all_metrics(y_test_sul, y_test_sul_pred)
 
-    print("\n  Metricas Teste Sul:")
-    print(f"    MAE: {test_metrics_sul['mae_kg_ha']:.1f} kg/ha")
-    print(f"    MAPE: {test_metrics_sul['mape_percent']:.1f}%")
+    logger.info("\n  Metricas Teste Sul:")
+    logger.info(f"    MAE: {test_metrics_sul['mae_kg_ha']:.1f} kg/ha")
+    logger.info(f"    MAPE: {test_metrics_sul['mape_percent']:.1f}%")
 
     fi_sul = get_feature_importance(model_sul, feature_cols)
 
-    print("\n" + "-" * 60)
-    print("TREINANDO MODELO CERRADO (demais estados)")
-    print("-" * 60)
+    logger.info("\n" + "-" * 60)
+    logger.info("TREINANDO MODELO CERRADO (demais estados)")
+    logger.info("-" * 60)
 
     train_cerrado = split.train[split.train["is_sul"] == 0]
     val_cerrado = split.validation[split.validation["is_sul"] == 0]
     test_cerrado = split.test[split.test["is_sul"] == 0]
 
-    print(f"  Treino Cerrado: {len(train_cerrado):,} amostras")
-    print(f"  Validacao Cerrado: {len(val_cerrado):,} amostras")
-    print(f"  Teste Cerrado: {len(test_cerrado):,} amostras")
+    logger.info(f"  Treino Cerrado: {len(train_cerrado):,} amostras")
+    logger.info(f"  Validacao Cerrado: {len(val_cerrado):,} amostras")
+    logger.info(f"  Teste Cerrado: {len(test_cerrado):,} amostras")
 
     X_train_cerrado, y_train_cerrado = prepare_data(train_cerrado, feature_cols)
     X_val_cerrado, y_val_cerrado = prepare_data(val_cerrado, feature_cols)
     X_test_cerrado, y_test_cerrado = prepare_data(test_cerrado, feature_cols)
 
-    print("\n  Treinando modelo Cerrado...")
+    logger.info("\n  Treinando modelo Cerrado...")
     model_cerrado, best_iter_cerrado = train_lightgbm(
         X_train_cerrado,
         y_train_cerrado,
@@ -230,27 +225,27 @@ def train_regional_models() -> RegionalTrainingResult:
         config.early_stopping_rounds,
         config.early_stopping_enabled,
     )
-    print(f"  Melhor iteracao: {best_iter_cerrado}")
+    logger.info(f"  Melhor iteracao: {best_iter_cerrado}")
 
     y_test_cerrado_pred = model_cerrado.predict(X_test_cerrado)
     test_metrics_cerrado = compute_all_metrics(y_test_cerrado, y_test_cerrado_pred)
 
-    print("\n  Metricas Teste Cerrado:")
-    print(f"    MAE: {test_metrics_cerrado['mae_kg_ha']:.1f} kg/ha")
-    print(f"    MAPE: {test_metrics_cerrado['mape_percent']:.1f}%")
+    logger.info("\n  Metricas Teste Cerrado:")
+    logger.info(f"    MAE: {test_metrics_cerrado['mae_kg_ha']:.1f} kg/ha")
+    logger.info(f"    MAPE: {test_metrics_cerrado['mape_percent']:.1f}%")
 
     fi_cerrado = get_feature_importance(model_cerrado, feature_cols)
 
-    print("\n" + "-" * 60)
-    print("METRICAS COMBINADAS (ponderadas por n amostras)")
-    print("-" * 60)
+    logger.info("\n" + "-" * 60)
+    logger.info("METRICAS COMBINADAS (ponderadas por n amostras)")
+    logger.info("-" * 60)
 
     y_test_combined = np.concatenate([y_test_sul, y_test_cerrado])
     y_pred_combined = np.concatenate([y_test_sul_pred, y_test_cerrado_pred])
     combined_metrics = compute_all_metrics(y_test_combined, y_pred_combined)
 
-    print(f"\n  MAE Combinado: {combined_metrics['mae_kg_ha']:.1f} kg/ha")
-    print(f"  MAPE Combinado: {combined_metrics['mape_percent']:.1f}%")
+    logger.info(f"\n  MAE Combinado: {combined_metrics['mae_kg_ha']:.1f} kg/ha")
+    logger.info(f"  MAPE Combinado: {combined_metrics['mape_percent']:.1f}%")
 
     MODELS_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -263,8 +258,8 @@ def train_regional_models() -> RegionalTrainingResult:
     with open(cerrado_path, "wb") as f:
         pickle.dump(model_cerrado, f)
 
-    print(f"\n  Modelo Sul salvo em: {sul_path}")
-    print(f"  Modelo Cerrado salvo em: {cerrado_path}")
+    logger.info(f"\n  Modelo Sul salvo em: {sul_path}")
+    logger.info(f"  Modelo Cerrado salvo em: {cerrado_path}")
 
     training_time = time.time() - start_time
 
@@ -294,26 +289,26 @@ def train_regional_models() -> RegionalTrainingResult:
     with open(result_path, "w") as f:
         json.dump(asdict(result), f, indent=2, default=str)
 
-    print("\n" + "=" * 60)
-    print("COMPARATIVO DE PERFORMANCE")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("COMPARATIVO DE PERFORMANCE")
+    logger.info("=" * 60)
 
-    print("\n{:<20} {:>12} {:>12}".format("Regiao", "MAE (kg/ha)", "MAPE (%)"))
-    print("-" * 44)
-    print(
+    logger.info("\n{:<20} {:>12} {:>12}".format("Regiao", "MAE (kg/ha)", "MAPE (%)"))
+    logger.info("-" * 44)
+    logger.info(
         "{:<20} {:>12.1f} {:>12.1f}".format(
             "Sul (regional)", test_metrics_sul["mae_kg_ha"], test_metrics_sul["mape_percent"]
         )
     )
-    print(
+    logger.info(
         "{:<20} {:>12.1f} {:>12.1f}".format(
             "Cerrado (regional)",
             test_metrics_cerrado["mae_kg_ha"],
             test_metrics_cerrado["mape_percent"],
         )
     )
-    print("-" * 44)
-    print(
+    logger.info("-" * 44)
+    logger.info(
         "{:<20} {:>12.1f} {:>12.1f}".format(
             "COMBINADO", combined_metrics["mae_kg_ha"], combined_metrics["mape_percent"]
         )
@@ -326,24 +321,24 @@ def train_regional_models() -> RegionalTrainingResult:
         single_mae = single_result["test_metrics"]["mae_kg_ha"]
 
         improvement = (single_mae - combined_metrics["mae_kg_ha"]) / single_mae * 100
-        print(f"\n  Modelo unico MAE: {single_mae:.1f} kg/ha")
-        print(f"  Modelo regional MAE: {combined_metrics['mae_kg_ha']:.1f} kg/ha")
-        print(f"  Melhoria: {improvement:+.1f}%")
+        logger.info(f"\n  Modelo unico MAE: {single_mae:.1f} kg/ha")
+        logger.info(f"  Modelo regional MAE: {combined_metrics['mae_kg_ha']:.1f} kg/ha")
+        logger.info(f"  Melhoria: {improvement:+.1f}%")
 
-    print(f"\n  Tempo de treinamento: {training_time:.1f}s")
+    logger.info(f"\n  Tempo de treinamento: {training_time:.1f}s")
 
-    print("\n" + "=" * 60)
-    print("TOP 10 FEATURES POR REGIAO")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("TOP 10 FEATURES POR REGIAO")
+    logger.info("=" * 60)
 
-    print("\n{:<30} {:>15} {:>15}".format("Feature", "Sul", "Cerrado"))
-    print("-" * 60)
+    logger.info("\n{:<30} {:>15} {:>15}".format("Feature", "Sul", "Cerrado"))
+    logger.info("-" * 60)
 
     all_features = set(list(fi_sul.keys())[:15] + list(fi_cerrado.keys())[:15])
     for feat in list(all_features)[:15]:
         sul_imp = fi_sul.get(feat, 0)
         cer_imp = fi_cerrado.get(feat, 0)
-        print(f"{feat[:30]:<30} {sul_imp:>15.0f} {cer_imp:>15.0f}")
+        logger.info(f"{feat[:30]:<30} {sul_imp:>15.0f} {cer_imp:>15.0f}")
 
     return result
 

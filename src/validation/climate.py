@@ -1,11 +1,10 @@
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import pandera as pa
-import yaml
+
+from src.common.io import PROJECT_ROOT, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,16 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "configs" / "climate.yaml"
 CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
-
-
-def load_config() -> dict[str, Any]:
-    """Carrega configuracao do climate.yaml."""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    return config["climate"]
 
 
 def validate_temp_consistency(df: pd.DataFrame) -> tuple[bool, str]:
@@ -183,7 +173,7 @@ def validate_temperature_range(df: pd.DataFrame) -> tuple[bool, str]:
 def validate_climate(df: pd.DataFrame, config: dict | None = None) -> dict[str, tuple[bool, str]]:
     """Executa todas as validacoes do dataset climatico."""
     if config is None:
-        config = load_config()
+        config = load_config("climate", section="climate")
 
     results = {}
 
@@ -308,7 +298,7 @@ def main():
     df = pd.read_parquet(CLIMATE_PATH)
     logger.info(f"Registros carregados: {len(df):,}")
 
-    config = load_config()
+    config = load_config("climate", section="climate")
 
     results = validate_climate(df, config)
 
