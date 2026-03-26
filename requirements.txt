@@ -3,9 +3,13 @@ pandas>=2.0.0
 numpy>=1.24.0
 pyyaml>=6.0
 pyarrow>=14.0.0
+duckdb>=1.5.0
 
 # Data validation
 pandera>=0.18.0
+
+# Data sources
+agrobr
 
 # Machine Learning
 lightgbm>=4.0.0
@@ -24,10 +28,10 @@ matplotlib>=3.7.0
 # HTTP requests
 requests>=2.31.0
 
-# Google Earth Engine (NDVI)
-earthengine-api>=0.1.380
-geemap>=0.30.0
+# Google Earth Engine (optional - needs credentials)
+# earthengine-api>=0.1.380
+# geemap>=0.30.0
 
 # Dashboard (optional)
-streamlit>=1.29.0
-plotly>=5.18.0
+# streamlit>=1.29.0
+# plotly>=5.18.0

@@ -22,7 +22,7 @@ jobs:
         run: pip install ruff
 
       - name: Run ruff
-        run: ruff check src/ --ignore=E501,F401,E402
+        run: ruff check src/ scripts/ --ignore=E501,F401,E402
 
   test:
     name: Tests
@@ -44,8 +44,9 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Run structure tests
-        run: pytest tests/test_structure.py -v
+      - name: Run tests
+        run: |
+          pytest tests/test_structure.py tests/test_water_balance.py tests/test_new_source_features.py -v
 
   build:
     name: Build & Import Check
@@ -68,7 +69,9 @@ jobs:
       - name: Verify core imports
         run: |
           python -c "import src; print(f'Package version: {src.__version__}')"
-          python -c "from src.features.build_features import main; print('Features module OK')"
-          python -c "from src.modeling.ensemble import RegionalEnsemble, EnsembleModel; print('Ensemble module OK')"
+          python -c "from src.features.build_features import main; print('Features OK')"
+          python -c "from src.inference.predict import main; print('Predict OK')"
+          python -c "from src.common.conformal import ConformalCalibrator; print('Conformal OK')"
+          python -c "from src.common.climate_aggregation import aggregate_climate_duckdb; print('DuckDB OK')"
           python -c "from src.ingest.climate_power import main; print('Climate ingest OK')"
           echo "All imports successful!"
