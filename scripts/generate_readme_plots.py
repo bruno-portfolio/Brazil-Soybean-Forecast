@@ -49,8 +49,9 @@ with open("models/model_cerrado.pkl", "rb") as f:
     model_cerrado = pickle.load(f)
 
 model_features = model.feature_name()
+regional_features = model_sul.feature_name()
 
-test = df[df["ano"] == 2023]
+test = df[df["ano"] == 2023].dropna(subset=["produtividade_kg_ha"])
 y_test = test["produtividade_kg_ha"].values
 y_pred_global = model.predict(test[model_features].values)
 
@@ -58,13 +59,13 @@ test_c = test.copy()
 test_c["uf_cod"] = test_c["cod_ibge"].astype(str).str[:2].astype(int)
 test_c["is_sul"] = test_c["uf_cod"].isin(REGION_SUL).astype(int)
 
-t_sul = test_c[test_c["is_sul"] == 1].dropna(subset=list(model_features) + ["produtividade_kg_ha"])
-t_cer = test_c[test_c["is_sul"] == 0].dropna(subset=list(model_features) + ["produtividade_kg_ha"])
+t_sul = test_c[test_c["is_sul"] == 1]
+t_cer = test_c[test_c["is_sul"] == 0]
 
 y_sul = t_sul["produtividade_kg_ha"].values
 y_cer = t_cer["produtividade_kg_ha"].values
-y_pred_sul = model_sul.predict(t_sul[model_features].values)
-y_pred_cer = model_cerrado.predict(t_cer[model_features].values)
+y_pred_sul = model_sul.predict(t_sul[regional_features].values)
+y_pred_cer = model_cerrado.predict(t_cer[regional_features].values)
 
 # Baselines
 all_data = df[["cod_ibge", "ano", "produtividade_kg_ha"]].sort_values(["cod_ibge", "ano"])
@@ -271,10 +272,16 @@ print("  3/5 readme_scatter.png")
 # ===================================================================
 # PLOT 4: FEATURE IMPORTANCE (Top 20)
 # ===================================================================
-with open("results/training_result.json") as f:
+with open("results/regional_training_result.json") as f:
     tr = json.load(f)
 
-fi = tr["feature_importance"]
+# Combina importancia Sul + Cerrado (soma)
+fi_sul_raw = tr["feature_importance_sul"]
+fi_cer_raw = tr["feature_importance_cerrado"]
+fi = {}
+for feat in fi_sul_raw:
+    fi[feat] = fi_sul_raw.get(feat, 0) + fi_cer_raw.get(feat, 0)
+fi = dict(sorted(fi.items(), key=lambda x: x[1], reverse=True))
 top_n = 20
 feats = list(fi.keys())[:top_n]
 vals = [fi[f] for f in feats]
@@ -302,13 +309,20 @@ pretty = {
     "radiation_mean": "Solar Radiation (mean)",
     "oni_avg": "ENSO Index (avg)",
     "tmean_plantio": "Planting Temperature",
+    "mun_yield_hist_mean": "Municipality Hist. Mean",
+    "mun_yield_volatility": "Municipality Volatility",
+    "ndvi_mean_safra": "NDVI Season Mean",
+    "ndvi_enchimento": "NDVI Grain Fill",
+    "terminal_drought_stress": "Terminal Drought Stress",
+    "hot_days_anomaly": "Hot Days Anomaly",
+    "precip_enchimento_anomaly": "Grain Fill Precip Anomaly",
 }
 
 labels = [pretty.get(f, f) for f in feats]
 
 cat_colors = []
 for f in feats:
-    if f.startswith("produtividade") or f == "trend":
+    if f.startswith("produtividade") or f == "trend" or f.startswith("mun_yield"):
         cat_colors.append(C_BLUE)
     elif any(k in f for k in ["deficit", "water", "precip", "eto", "dry"]):
         cat_colors.append(C_GREEN)
@@ -359,11 +373,21 @@ fig, ax = plt.subplots(figsize=(12, 5))
 
 year_errors = []
 for ano in sorted(df["ano"].unique()):
-    year_data = df[df["ano"] == ano]
-    X = year_data[model_features].values
-    y = year_data["produtividade_kg_ha"].values
-    y_p = model.predict(X)
-    mae = np.mean(np.abs(y - y_p))
+    year_data = df[df["ano"] == ano].dropna(subset=["produtividade_kg_ha"]).copy()
+    year_data["uf_cod"] = year_data["cod_ibge"].astype(str).str[:2].astype(int)
+    year_data["is_sul"] = year_data["uf_cod"].isin(REGION_SUL).astype(int)
+    yd_sul = year_data[year_data["is_sul"] == 1]
+    yd_cer = year_data[year_data["is_sul"] == 0]
+    y_parts, p_parts = [], []
+    if len(yd_sul) > 0:
+        y_parts.append(yd_sul["produtividade_kg_ha"].values)
+        p_parts.append(model_sul.predict(yd_sul[regional_features].values))
+    if len(yd_cer) > 0:
+        y_parts.append(yd_cer["produtividade_kg_ha"].values)
+        p_parts.append(model_cerrado.predict(yd_cer[regional_features].values))
+    y_all = np.concatenate(y_parts)
+    p_all = np.concatenate(p_parts)
+    mae = np.mean(np.abs(y_all - p_all))
     year_errors.append({"ano": int(ano), "mae": mae, "n": len(year_data)})
 
 ye_df = pd.DataFrame(year_errors)
@@ -418,7 +442,8 @@ print("  5/5 readme_error_by_year.png")
 print("\n" + "=" * 60)
 print("NUMEROS VALIDADOS PARA O README")
 print("=" * 60)
-print(f"Features: {len(model_features)}")
+print(f"Features (global): {len(model_features)}")
+print(f"Features (regional): {len(regional_features)}")
 print(f"Dataset: {len(df):,} rows, {df['cod_ibge'].nunique()} municipios")
 print(
     f"Split: train<=2021 ({len(df[df['ano'] <= 2021]):,}), val=2022 ({len(df[df['ano'] == 2022]):,}), test=2023 ({len(df[df['ano'] == 2023]):,})"

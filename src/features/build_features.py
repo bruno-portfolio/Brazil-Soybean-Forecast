@@ -150,6 +150,21 @@ def calculate_historical_features(
 
     df["trend"] = (df["ano"] - trend_ref_min) / (trend_ref_max - trend_ref_min)
 
+    # Media historica expandida por municipio (sem leakage: shift(1))
+    df["mun_yield_hist_mean"] = (
+        df.groupby("cod_ibge")["produtividade_kg_ha"]
+        .apply(lambda x: x.shift(1).expanding(min_periods=3).mean())
+        .reset_index(level=0, drop=True)
+    )
+
+    # Volatilidade historica (CV = std / mean)
+    mun_std = (
+        df.groupby("cod_ibge")["produtividade_kg_ha"]
+        .apply(lambda x: x.shift(1).expanding(min_periods=3).std())
+        .reset_index(level=0, drop=True)
+    )
+    df["mun_yield_volatility"] = mun_std / (df["mun_yield_hist_mean"] + 1e-8)
+
     logger.info("  Features historicas calculadas")
 
     return df
@@ -354,7 +369,13 @@ def main():
 
     enso_cols = ["oni_avg", "oni_min", "oni_max", "oni_std", "is_la_nina", "is_el_nino"]
 
-    hist_cols = ["produtividade_lag1", "produtividade_ma3", "trend"]
+    hist_cols = [
+        "produtividade_lag1",
+        "produtividade_ma3",
+        "trend",
+        "mun_yield_hist_mean",
+        "mun_yield_volatility",
+    ]
 
     anomaly_cols = [
         "precip_anomaly",
@@ -423,6 +444,21 @@ def main():
         "sinistro_x_la_nina",
     ]
 
+    ndvi_cols = [
+        "ndvi_mean_safra",
+        "ndvi_max_safra",
+        "ndvi_min_safra",
+        "ndvi_amplitude",
+        "ndvi_plantio",
+        "ndvi_vegetativo",
+        "ndvi_enchimento",
+    ]
+
+    ndvi_interaction_cols = [
+        "ndvi_x_precip_deficit",
+        "ndvi_ench_x_la_nina",
+    ]
+
     all_cols = (
         key_cols
         + climate_agg_cols
@@ -438,6 +474,8 @@ def main():
         + soil_interaction_cols
         + new_source_cols
         + new_source_interaction_cols
+        + ndvi_cols
+        + ndvi_interaction_cols
     )
     cols_order = [c for c in all_cols if c in df.columns]
     df = df[cols_order]
