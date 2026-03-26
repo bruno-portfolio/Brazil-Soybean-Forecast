@@ -128,53 +128,6 @@ def add_ndvi_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def aggregate_climate_features_by_phase(
-    df: pd.DataFrame,
-    base_temp: float = 10.0,
-    hot_threshold: float = 32.0,
-    lat_lookup: dict[int, float] | None = None,
-) -> pd.DataFrame:
-    """Agrega features climaticas por fase fenologica (com water balance)."""
-    logger.info("Agregando features climaticas por fase fenologica...")
-
-    df = df.copy()
-
-    df["gdd"] = df.apply(lambda row: calculate_gdd(row, base_temp), axis=1)
-
-    df["is_hot_day"] = (df["tmax"] > hot_threshold).astype(int)
-
-    phases = ["plantio", "vegetativo", "enchimento"]
-    all_results = []
-
-    _lat_lookup = lat_lookup or {}
-
-    for cod_ibge in df["cod_ibge"].unique():
-        df_mun = df[df["cod_ibge"] == cod_ibge]
-        mun_lat = _lat_lookup.get(cod_ibge, -15.0)
-
-        for crop_year in df_mun["crop_year"].unique():
-            if pd.isna(crop_year):
-                continue
-
-            df_season = df_mun[df_mun["crop_year"] == crop_year]
-
-            result = {"cod_ibge": cod_ibge, "ano": int(crop_year)}
-            result.update(aggregate_season_climate(df_season, phases))
-
-            wb_metrics = calculate_water_balance_metrics(df_season, lat=mun_lat)
-            result.update(wb_metrics)
-
-            wb_phase = calculate_water_balance_by_phase(df_season, phases, lat=mun_lat)
-            result.update(wb_phase)
-
-            all_results.append(result)
-
-    df_agg = pd.DataFrame(all_results)
-    logger.info(f"  Registros agregados: {len(df_agg):,}")
-
-    return df_agg
-
-
 def calculate_historical_features(
     df: pd.DataFrame, trend_ref_min: int = 2000, trend_ref_max: int = 2025
 ) -> pd.DataFrame:

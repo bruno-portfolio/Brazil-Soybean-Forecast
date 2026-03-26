@@ -19,8 +19,6 @@ from src.common.features import (
 )
 from src.common.io import PROJECT_ROOT, load_config, load_municipalities
 from src.common.phenology import (
-    aggregate_season_climate,
-    calculate_gdd,
     filter_phenology_window_regional,
     get_default_phenology,
     get_regional_phenology,
@@ -209,71 +207,6 @@ def get_soy_producing_municipalities(df_target: pd.DataFrame, min_years: int = 3
     producers = counts[counts >= min_years].index.tolist()
     logger.info(f"  Municipios produtores (>= {min_years} anos desde 2020): {len(producers):,}")
     return producers
-
-
-def prepare_climate_features(
-    df_climate: pd.DataFrame,
-    municipalities: list,
-    years: list,
-    base_temp: float = 10.0,
-    hot_threshold: float = 32.0,
-    lat_lookup: dict[int, float] | None = None,
-) -> pd.DataFrame:
-    """Prepara features climaticas para os anos especificados (com water balance).
-
-    Usa janelas fenologicas regionais de configs/features.yaml (ex: MT comeca em Set).
-    """
-    from src.common.water_balance import (
-        calculate_water_balance_by_phase,
-        calculate_water_balance_metrics,
-    )
-
-    logger.info(f"Preparando features climaticas para anos: {years}")
-
-    df = df_climate[df_climate["cod_ibge"].isin(municipalities)].copy()
-
-    features_config = load_config("features")
-    regional_pheno = get_regional_phenology(features_config)
-    default_pheno = get_default_phenology(features_config)
-
-    df = filter_phenology_window_regional(df, regional_pheno, default_pheno)
-
-    df = df[df["crop_year"].isin(years)]
-
-    df["gdd"] = df.apply(lambda row: calculate_gdd(row, base_temp), axis=1)
-    df["is_hot_day"] = (df["tmax"] > hot_threshold).astype(int)
-
-    logger.info(f"  Registros de clima filtrados: {len(df):,}")
-
-    phases = ["plantio", "vegetativo", "enchimento"]
-    _lat_lookup = lat_lookup or {}
-    all_results = []
-
-    for cod_ibge in df["cod_ibge"].unique():
-        df_mun = df[df["cod_ibge"] == cod_ibge]
-        mun_lat = _lat_lookup.get(cod_ibge, -15.0)
-
-        for crop_year in df_mun["crop_year"].unique():
-            if pd.isna(crop_year):
-                continue
-
-            df_season = df_mun[df_mun["crop_year"] == crop_year]
-
-            result = {"cod_ibge": cod_ibge, "ano": int(crop_year)}
-            result.update(aggregate_season_climate(df_season, phases))
-
-            wb_metrics = calculate_water_balance_metrics(df_season, lat=mun_lat)
-            result.update(wb_metrics)
-
-            wb_phase = calculate_water_balance_by_phase(df_season, phases, lat=mun_lat)
-            result.update(wb_phase)
-
-            all_results.append(result)
-
-    df_agg = pd.DataFrame(all_results)
-    logger.info(f"  Features climaticas agregadas: {len(df_agg):,} registros")
-
-    return df_agg
 
 
 ANOMALY_COLS = [
