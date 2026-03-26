@@ -2,54 +2,9 @@ from __future__ import annotations
 
 import logging
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-
-PHASES = ["plantio", "vegetativo", "enchimento"]
-
-
-def aggregate_season_climate(df_season: pd.DataFrame, phases: list[str] = PHASES) -> dict:
-    """Agrega features climaticas base para uma safra de um municipio.
-
-    Retorna dict com features por fase + totais + dry spell + variabilidade.
-    Nao inclui water balance (adicionado separadamente em build_features).
-    """
-    result = {}
-
-    for phase in phases:
-        df_phase = df_season[df_season["phase"] == phase]
-
-        if len(df_phase) > 0:
-            result[f"precip_{phase}_mm"] = df_phase["precip"].sum()
-            result[f"tmean_{phase}"] = df_phase["tmean"].mean()
-            result[f"tmin_{phase}"] = df_phase["tmin"].mean()
-            result[f"tmax_{phase}"] = df_phase["tmax"].mean()
-            result[f"hot_days_{phase}"] = df_phase["is_hot_day"].sum()
-            result[f"gdd_{phase}"] = df_phase["gdd"].sum()
-        else:
-            result[f"precip_{phase}_mm"] = 0
-            result[f"tmean_{phase}"] = np.nan
-            result[f"tmin_{phase}"] = np.nan
-            result[f"tmax_{phase}"] = np.nan
-            result[f"hot_days_{phase}"] = 0
-            result[f"gdd_{phase}"] = 0
-
-    result["precip_total_mm"] = df_season["precip"].sum()
-    result["tmean_avg"] = df_season["tmean"].mean()
-    result["tmin_avg"] = df_season["tmin"].mean()
-    result["tmax_avg"] = df_season["tmax"].mean()
-    result["hot_days_count"] = df_season["is_hot_day"].sum()
-    result["gdd_accumulated"] = df_season["gdd"].sum()
-
-    dry_metrics = calculate_dry_spell_metrics(df_season)
-    result.update(dry_metrics)
-
-    var_metrics = calculate_precip_variability(df_season)
-    result.update(var_metrics)
-
-    return result
 
 
 def assign_crop_year(date: pd.Timestamp, start_month: int = 10, end_month: int = 3) -> int | None:
@@ -75,11 +30,6 @@ def assign_phenology_phase(date: pd.Timestamp) -> str | None:
     elif month in [2, 3]:
         return "enchimento"
     return None
-
-
-def calculate_gdd(row: pd.Series, base_temp: float = 10.0) -> float:
-    """Calcula Growing Degree Days (GDD) para um dia."""
-    return max(0, row["tmean"] - base_temp)
 
 
 def calculate_dry_spell_metrics(df_group: pd.DataFrame, threshold_mm: float = 2.0) -> dict:

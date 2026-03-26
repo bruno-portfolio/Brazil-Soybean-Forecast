@@ -191,7 +191,12 @@ ANOMALY_COLS = [
 
 
 def _fill_missing_anomalies(df: pd.DataFrame) -> None:
-    """Preenche anomalias faltantes com 0.0 (municipios sem historico suficiente)."""
+    """Preenche anomalias faltantes com 0.0.
+
+    NaN ocorre em municipios com <5 anos de historico (min_years do expanding window).
+    Anomalia=0 significa "sem desvio da normal", proxy aceitavel para inferencia
+    quando nao ha dados suficientes para calcular o z-score real.
+    """
     for col in ANOMALY_COLS:
         if col in df.columns:
             df[col] = df[col].fillna(0.0)

@@ -250,8 +250,8 @@ def add_soil_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     if "awc_estimated" in df.columns and "dry_spell_max" in df.columns:
-        awc_norm = df["awc_estimated"] / df["awc_estimated"].max()
-        dry_norm = df["dry_spell_max"] / df["dry_spell_max"].std()
+        awc_norm = df["awc_estimated"] / (df["awc_estimated"].max() + 1e-8)
+        dry_norm = df["dry_spell_max"] / (df["dry_spell_max"].std() + 1e-8)
         df["awc_x_dry_spell"] = (1 - awc_norm) * dry_norm
         interactions_added += 1
         logger.info(
@@ -262,7 +262,7 @@ def add_soil_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
 
     if "sand_0_30cm" in df.columns and "dry_spell_max" in df.columns:
         sand_norm = df["sand_0_30cm"] / 100
-        dry_norm = df["dry_spell_max"] / df["dry_spell_max"].std()
+        dry_norm = df["dry_spell_max"] / (df["dry_spell_max"].std() + 1e-8)
         df["sand_x_drought"] = sand_norm * dry_norm
         interactions_added += 1
 
@@ -278,7 +278,7 @@ def add_soil_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     if "soc_0_30cm" in df.columns and "hot_days_anomaly" in df.columns:
-        soc_norm = df["soc_0_30cm"] / df["soc_0_30cm"].max()
+        soc_norm = df["soc_0_30cm"] / (df["soc_0_30cm"].max() + 1e-8)
         df["soc_x_heat_stress"] = (1 - soc_norm) * df["hot_days_anomaly"].fillna(0)
         interactions_added += 1
 

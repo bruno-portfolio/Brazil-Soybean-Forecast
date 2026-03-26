@@ -441,9 +441,12 @@ def main():
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     feature_cols = [c for c in numeric_cols if c not in exclude_cols]
 
-    df_train = df[df["ano"] <= 2018]
-    df_val = df[(df["ano"] >= 2019) & (df["ano"] <= 2021)]
-    df_test = df[df["ano"] >= 2022]
+    from src.modeling.split import load_config as load_split_config
+
+    split_cfg = load_split_config()
+    df_train = df[df["ano"] <= split_cfg.train_end_year]
+    df_val = df[(df["ano"] >= split_cfg.val_start_year) & (df["ano"] <= split_cfg.val_end_year)]
+    df_test = df[(df["ano"] >= split_cfg.test_start_year) & (df["ano"] <= split_cfg.test_end_year)]
 
     X_train = df_train[feature_cols]
     y_train = df_train[target_col]

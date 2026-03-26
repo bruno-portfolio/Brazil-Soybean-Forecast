@@ -47,8 +47,8 @@ def prepare_data(
     df: pd.DataFrame,
     feature_cols: list[str],
     target_col: str = "produtividade_kg_ha",
-) -> tuple[np.ndarray, np.ndarray]:
-    """Prepara dados para treinamento."""
+) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+    """Prepara dados para treinamento. Retorna X, y e DataFrame limpo."""
     df_clean = df.dropna(subset=feature_cols + [target_col])
     X = df_clean[feature_cols].values
     y = df_clean[target_col].values
