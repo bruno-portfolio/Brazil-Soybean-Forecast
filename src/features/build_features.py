@@ -1,6 +1,5 @@
 import logging
 
-import numpy as np
 import pandas as pd
 
 from src.common.features import (
@@ -20,6 +19,10 @@ from src.common.phenology import (
     get_default_phenology,
     get_regional_phenology,
 )
+from src.common.water_balance import (
+    calculate_water_balance_by_phase,
+    calculate_water_balance_metrics,
+)
 
 logger = logging.getLogger(__name__)
 CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
@@ -29,8 +32,6 @@ ENSO_PATH = PROJECT_ROOT / "data" / "processed" / "oni_enso.parquet"
 SOIL_PATH = PROJECT_ROOT / "data" / "processed" / "soil_properties.parquet"
 NDVI_PATH = PROJECT_ROOT / "data" / "processed" / "ndvi_safra.parquet"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final.parquet"
-
-LATITUDE_DEFAULT = -15.0
 
 
 def load_climate_data() -> pd.DataFrame:
@@ -52,60 +53,6 @@ def load_climate_data() -> pd.DataFrame:
         logger.info(f"  Registros com radiacao: {n_radiation:,}")
 
     return df
-
-
-def calculate_eto_hargreaves(row: pd.Series, lat: float = LATITUDE_DEFAULT) -> float:
-    """Calcula ETo pelo metodo Hargreaves-Samani (mm/dia)."""
-    tmin = row.get("tmin", row.get("tmean", 20) - 5)
-    tmax = row.get("tmax", row.get("tmean", 20) + 5)
-    tmean = row.get("tmean", (tmin + tmax) / 2)
-
-    if pd.isna(tmin) or pd.isna(tmax):
-        return np.nan
-
-    day_of_year = row["date"].dayofyear
-
-    dr = 1 + 0.033 * np.cos(2 * np.pi * day_of_year / 365)
-    delta = 0.409 * np.sin(2 * np.pi * day_of_year / 365 - 1.39)
-    lat_rad = lat * np.pi / 180
-    ws = np.arccos(-np.tan(lat_rad) * np.tan(delta))
-    Ra = (
-        (24 * 60 / np.pi)
-        * 0.0820
-        * dr
-        * (ws * np.sin(lat_rad) * np.sin(delta) + np.cos(lat_rad) * np.cos(delta) * np.sin(ws))
-    )
-
-    eto = 0.0023 * (tmean + 17.8) * np.sqrt(max(0, tmax - tmin)) * Ra
-    return max(0, eto)
-
-
-def calculate_eto_with_radiation(row: pd.Series) -> float:
-    """Calcula ETo usando radiacao solar (Penman-Monteith simplificado)."""
-    radiation = row.get("radiation")
-    tmean = row.get("tmean")
-    rh = row.get("rh", 60)
-    wind = row.get("wind_speed", 2.0)
-
-    if pd.isna(radiation) or pd.isna(tmean):
-        return calculate_eto_hargreaves(row)
-
-    Rs = radiation
-
-    delta = 4098 * (0.6108 * np.exp(17.27 * tmean / (tmean + 237.3))) / ((tmean + 237.3) ** 2)
-
-    gamma = 0.066
-
-    es = 0.6108 * np.exp(17.27 * tmean / (tmean + 237.3))
-    ea = es * rh / 100
-
-    Rn = 0.77 * Rs - 2.0
-
-    eto = (0.408 * delta * Rn + gamma * (900 / (tmean + 273)) * wind * (es - ea)) / (
-        delta + gamma * (1 + 0.34 * wind)
-    )
-
-    return max(0, eto)
 
 
 def load_target_data() -> pd.DataFrame:
@@ -187,74 +134,13 @@ def add_ndvi_climate_interactions(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def calculate_water_balance_metrics(df_group: pd.DataFrame) -> dict:
-    """Calcula metricas de balanco hidrico (ETo, deficit)."""
-    result = {
-        "eto_total_mm": 0,
-        "eto_mean_mm": np.nan,
-        "water_deficit_mm": 0,
-        "water_deficit_ratio": np.nan,
-        "radiation_mean": np.nan,
-        "radiation_total": 0,
-    }
-
-    if len(df_group) == 0:
-        return result
-
-    has_radiation = "radiation" in df_group.columns and df_group["radiation"].notna().any()
-
-    if has_radiation:
-        df_group = df_group.copy()
-        df_group["eto"] = df_group.apply(calculate_eto_with_radiation, axis=1)
-        result["radiation_mean"] = df_group["radiation"].mean()
-        result["radiation_total"] = df_group["radiation"].sum()
-    else:
-        df_group = df_group.copy()
-        df_group["eto"] = df_group.apply(calculate_eto_hargreaves, axis=1)
-
-    eto_values = df_group["eto"].dropna()
-    if len(eto_values) > 0:
-        result["eto_total_mm"] = eto_values.sum()
-        result["eto_mean_mm"] = eto_values.mean()
-
-    precip = df_group["precip"].fillna(0).values
-    eto = df_group["eto"].fillna(0).values
-
-    deficit = np.maximum(0, eto - precip)
-    result["water_deficit_mm"] = deficit.sum()
-
-    if result["eto_total_mm"] > 0:
-        result["water_deficit_ratio"] = result["water_deficit_mm"] / result["eto_total_mm"]
-
-    return result
-
-
-def calculate_water_balance_by_phase(df_season: pd.DataFrame, phases: list[str]) -> dict:
-    """Calcula balanco hidrico por fase fenologica."""
-    result = {}
-
-    for phase in phases:
-        df_phase = df_season[df_season["phase"] == phase]
-        wb = calculate_water_balance_metrics(df_phase)
-
-        result[f"eto_{phase}_mm"] = wb["eto_total_mm"]
-        result[f"deficit_{phase}_mm"] = wb["water_deficit_mm"]
-
-        if phase == "enchimento":
-            result["deficit_ratio_enchimento"] = wb["water_deficit_ratio"]
-
-    return result
-
-
 def aggregate_climate_features_by_phase(
-    df: pd.DataFrame, base_temp: float = 10.0, hot_threshold: float = 32.0
+    df: pd.DataFrame,
+    base_temp: float = 10.0,
+    hot_threshold: float = 32.0,
+    lat_lookup: dict[int, float] | None = None,
 ) -> pd.DataFrame:
-    """Agrega features climaticas por fase fenologica.
-
-    Versao completa com water balance. predict.py usa prepare_climate_features
-    que nao inclui water balance. Ao unificar, mover water balance functions
-    para src/common.
-    """
+    """Agrega features climaticas por fase fenologica (com water balance)."""
     logger.info("Agregando features climaticas por fase fenologica...")
 
     df = df.copy()
@@ -266,8 +152,11 @@ def aggregate_climate_features_by_phase(
     phases = ["plantio", "vegetativo", "enchimento"]
     all_results = []
 
+    _lat_lookup = lat_lookup or {}
+
     for cod_ibge in df["cod_ibge"].unique():
         df_mun = df[df["cod_ibge"] == cod_ibge]
+        mun_lat = _lat_lookup.get(cod_ibge, -15.0)
 
         for crop_year in df_mun["crop_year"].unique():
             if pd.isna(crop_year):
@@ -278,15 +167,10 @@ def aggregate_climate_features_by_phase(
             result = {"cod_ibge": cod_ibge, "ano": int(crop_year)}
             result.update(aggregate_season_climate(df_season, phases))
 
-            wb_metrics = calculate_water_balance_metrics(df_season)
-            result["eto_total_mm"] = wb_metrics["eto_total_mm"]
-            result["eto_mean_mm"] = wb_metrics["eto_mean_mm"]
-            result["water_deficit_mm"] = wb_metrics["water_deficit_mm"]
-            result["water_deficit_ratio"] = wb_metrics["water_deficit_ratio"]
-            result["radiation_mean"] = wb_metrics["radiation_mean"]
-            result["radiation_total"] = wb_metrics["radiation_total"]
+            wb_metrics = calculate_water_balance_metrics(df_season, lat=mun_lat)
+            result.update(wb_metrics)
 
-            wb_phase = calculate_water_balance_by_phase(df_season, phases)
+            wb_phase = calculate_water_balance_by_phase(df_season, phases, lat=mun_lat)
             result.update(wb_phase)
 
             all_results.append(result)
@@ -297,7 +181,9 @@ def aggregate_climate_features_by_phase(
     return df_agg
 
 
-def calculate_historical_features(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_historical_features(
+    df: pd.DataFrame, trend_ref_min: int = 2000, trend_ref_max: int = 2025
+) -> pd.DataFrame:
     """Calcula features historicas de produtividade."""
     logger.info("Calculando features historicas...")
 
@@ -315,9 +201,7 @@ def calculate_historical_features(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index(level=0, drop=True)
     )
 
-    ano_min = df["ano"].min()
-    ano_max = df["ano"].max()
-    df["trend"] = (df["ano"] - ano_min) / (ano_max - ano_min)
+    df["trend"] = (df["ano"] - trend_ref_min) / (trend_ref_max - trend_ref_min)
 
     logger.info("  Features historicas calculadas")
 
@@ -410,11 +294,20 @@ def main():
     logger.info(f"Temperatura base GDD: {base_temp}C")
     logger.info(f"Threshold dias quentes: {hot_threshold}C")
 
+    trend_ref_min = config.get("features", {}).get("trend_ref_year_min", 2000)
+    trend_ref_max = config.get("features", {}).get("trend_ref_year_max", 2025)
+
     df_climate = load_climate_data()
     df_target = load_target_data()
     df_enso = load_enso_data()
     df_soil = load_soil_data()
     df_ndvi = load_ndvi_data()
+
+    from src.common.io import load_municipalities
+
+    df_mun = load_municipalities(columns=["cod_ibge", "lat"])
+    lat_lookup = dict(zip(df_mun["cod_ibge"], df_mun["lat"]))
+    logger.info(f"Lat lookup: {len(lat_lookup)} municipios")
 
     if regional_phenology:
         df_climate_window = filter_phenology_window_regional(
@@ -424,14 +317,14 @@ def main():
         df_climate_window = filter_phenology_window(df_climate, start_month, end_month)
 
     df_climate_agg = aggregate_climate_features_by_phase(
-        df_climate_window, base_temp, hot_threshold
+        df_climate_window, base_temp, hot_threshold, lat_lookup=lat_lookup
     )
 
     df_climate_agg = add_enso_features(df_climate_agg, df_enso)
 
     df = merge_features_and_target(df_climate_agg, df_target)
 
-    df = calculate_historical_features(df)
+    df = calculate_historical_features(df, trend_ref_min, trend_ref_max)
 
     df = calculate_climate_anomalies(df, min_years=5)
 
@@ -445,6 +338,20 @@ def main():
 
     df = add_ndvi_features(df, df_ndvi)
     df = add_ndvi_climate_interactions(df)
+
+    from src.common.new_source_features import (
+        add_fertilizante_features,
+        add_irrigacao_features,
+        add_new_source_interactions,
+        add_sinistro_features,
+        add_uso_solo_features,
+    )
+
+    df = add_irrigacao_features(df)
+    df = add_fertilizante_features(df)
+    df = add_sinistro_features(df)
+    df = add_uso_solo_features(df)
+    df = add_new_source_interactions(df)
 
     validate_no_leakage(df)
 
@@ -553,6 +460,19 @@ def main():
         "sand_x_deficit",
     ]
 
+    new_source_cols = [
+        "pct_irrigado",
+        "fert_total_safra_uf",
+        "sinistro_rate_3yr",
+        "pct_soja",
+    ]
+
+    new_source_interaction_cols = [
+        "irrigacao_x_deficit",
+        "fert_x_precip",
+        "sinistro_x_la_nina",
+    ]
+
     all_cols = (
         key_cols
         + climate_agg_cols
@@ -566,6 +486,8 @@ def main():
         + regional_cols
         + soil_cols
         + soil_interaction_cols
+        + new_source_cols
+        + new_source_interaction_cols
     )
     cols_order = [c for c in all_cols if c in df.columns]
     df = df[cols_order]

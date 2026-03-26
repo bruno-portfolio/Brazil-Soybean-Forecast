@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import os
 import pickle
 from datetime import datetime
 
@@ -27,8 +28,16 @@ from src.common.phenology import (
 
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = PROJECT_ROOT / "models" / "model_v1.pkl"
-MODEL_METADATA_PATH = PROJECT_ROOT / "results" / "training_result.json"
+MODEL_VERSION = os.environ.get("MODEL_VERSION", "v2")
+MODEL_PATH = PROJECT_ROOT / "models" / f"model_{MODEL_VERSION}.pkl"
+MODEL_METADATA_PATH = PROJECT_ROOT / "results" / f"training_result_{MODEL_VERSION}.json"
+
+# Fallback para v1 se v2 nao existe
+if not MODEL_PATH.exists():
+    _fallback = PROJECT_ROOT / "models" / "model_v1.pkl"
+    if _fallback.exists():
+        MODEL_PATH = _fallback
+        MODEL_METADATA_PATH = PROJECT_ROOT / "results" / "training_result.json"
 CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
 TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 ENSO_PATH = PROJECT_ROOT / "data" / "processed" / "oni_enso.parquet"
@@ -208,11 +217,17 @@ def prepare_climate_features(
     years: list,
     base_temp: float = 10.0,
     hot_threshold: float = 32.0,
+    lat_lookup: dict[int, float] | None = None,
 ) -> pd.DataFrame:
-    """Prepara features climaticas para os anos especificados.
+    """Prepara features climaticas para os anos especificados (com water balance).
 
     Usa janelas fenologicas regionais de configs/features.yaml (ex: MT comeca em Set).
     """
+    from src.common.water_balance import (
+        calculate_water_balance_by_phase,
+        calculate_water_balance_metrics,
+    )
+
     logger.info(f"Preparando features climaticas para anos: {years}")
 
     df = df_climate[df_climate["cod_ibge"].isin(municipalities)].copy()
@@ -230,10 +245,13 @@ def prepare_climate_features(
 
     logger.info(f"  Registros de clima filtrados: {len(df):,}")
 
+    phases = ["plantio", "vegetativo", "enchimento"]
+    _lat_lookup = lat_lookup or {}
     all_results = []
 
     for cod_ibge in df["cod_ibge"].unique():
         df_mun = df[df["cod_ibge"] == cod_ibge]
+        mun_lat = _lat_lookup.get(cod_ibge, -15.0)
 
         for crop_year in df_mun["crop_year"].unique():
             if pd.isna(crop_year):
@@ -242,7 +260,13 @@ def prepare_climate_features(
             df_season = df_mun[df_mun["crop_year"] == crop_year]
 
             result = {"cod_ibge": cod_ibge, "ano": int(crop_year)}
-            result.update(aggregate_season_climate(df_season))
+            result.update(aggregate_season_climate(df_season, phases))
+
+            wb_metrics = calculate_water_balance_metrics(df_season, lat=mun_lat)
+            result.update(wb_metrics)
+
+            wb_phase = calculate_water_balance_by_phase(df_season, phases, lat=mun_lat)
+            result.update(wb_phase)
 
             all_results.append(result)
 
@@ -275,7 +299,11 @@ def _fill_missing_anomalies(df: pd.DataFrame) -> None:
 
 
 def calculate_historical_features(
-    df: pd.DataFrame, df_target: pd.DataFrame, years_to_predict: list
+    df: pd.DataFrame,
+    df_target: pd.DataFrame,
+    years_to_predict: list,
+    trend_ref_min: int = 2000,
+    trend_ref_max: int = 2025,
 ) -> pd.DataFrame:
     """Calcula features historicas (lag1, ma3, trend) para previsao."""
     logger.info("Calculando features historicas...")
@@ -315,9 +343,7 @@ def calculate_historical_features(
 
     df = df.merge(df_hist_features, on=["cod_ibge", "ano"], how="inner")
 
-    ano_min = 2000
-    ano_max = 2023
-    df["trend"] = (df["ano"] - ano_min) / (ano_max - ano_min)
+    df["trend"] = (df["ano"] - trend_ref_min) / (trend_ref_max - trend_ref_min)
 
     logger.info(f"  Registros com features historicas: {len(df):,}")
 
@@ -500,7 +526,7 @@ def save_predictions(df: pd.DataFrame, model_metadata: dict, years: list) -> Non
 
     metadata = {
         "inference_date": datetime.now().isoformat(),
-        "model_version": "v1",
+        "model_version": MODEL_VERSION,
         "prediction_type": "ex-post",
         "prediction_description": "Previsoes usando clima observado (nao e forecast real)",
         "years_predicted": years,
@@ -575,16 +601,36 @@ def main():
 
     logger.info(f"Features do modelo: {len(feature_names)}")
 
+    features_config = load_config("features")
+    base_temp = 10.0
+    hot_threshold = 32.0
+    for feat in features_config["features"]["climate_features"]:
+        if feat["name"] == "gdd_accumulated":
+            base_temp = feat.get("base_temp", 10.0)
+        if feat["name"] == "hot_days_count":
+            hot_threshold = feat.get("threshold", 32.0)
+
+    trend_ref_min = features_config.get("features", {}).get("trend_ref_year_min", 2000)
+    trend_ref_max = features_config.get("features", {}).get("trend_ref_year_max", 2025)
+
     df_climate = load_climate_data()
     df_target = load_target_data()
     df_enso = load_enso_data()
+
+    df_mun = load_municipalities(columns=["cod_ibge", "lat"])
+    lat_lookup = dict(zip(df_mun["cod_ibge"], df_mun["lat"]))
 
     municipalities = get_soy_producing_municipalities(df_target, min_years=3)
 
     hist_start = min(years_to_predict) - 6
     all_years = list(range(hist_start, min(years_to_predict))) + years_to_predict
     df_all = prepare_climate_features(
-        df_climate, municipalities, all_years, base_temp=10.0, hot_threshold=32.0
+        df_climate,
+        municipalities,
+        all_years,
+        base_temp=base_temp,
+        hot_threshold=hot_threshold,
+        lat_lookup=lat_lookup,
     )
 
     df_all = add_enso_features(df_all, df_enso)
@@ -593,7 +639,9 @@ def main():
 
     df = df_all[df_all["ano"].isin(years_to_predict)].copy()
 
-    df = calculate_historical_features(df, df_target, years_to_predict)
+    df = calculate_historical_features(
+        df, df_target, years_to_predict, trend_ref_min, trend_ref_max
+    )
 
     _fill_missing_anomalies(df)
     df = add_regional_features(df)
@@ -608,6 +656,20 @@ def main():
             df = add_soil_climate_interactions(df)
         else:
             logger.warning("soil_properties.parquet nao encontrado, solo nao sera adicionado")
+
+    from src.common.new_source_features import (
+        add_fertilizante_features,
+        add_irrigacao_features,
+        add_new_source_interactions,
+        add_sinistro_features,
+        add_uso_solo_features,
+    )
+
+    df = add_irrigacao_features(df)
+    df = add_fertilizante_features(df)
+    df = add_sinistro_features(df)
+    df = add_uso_solo_features(df)
+    df = add_new_source_interactions(df)
 
     if use_regional:
         df = generate_predictions_regional(

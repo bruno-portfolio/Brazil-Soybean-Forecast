@@ -1,10 +1,11 @@
+"""Ingestao de dados climaticos diarios via agrobr (NASA POWER)."""
+
 from __future__ import annotations
 
+import asyncio
 import logging
-import time
 
 import pandas as pd
-import requests
 
 from src.common.cache import consolidate_cache, get_cached_codes, save_to_cache
 from src.common.io import (
@@ -19,133 +20,73 @@ logger = logging.getLogger(__name__)
 CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "climate"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
 
-
-def build_power_url(
-    lat: float,
-    lon: float,
-    start_date: str,
-    end_date: str,
-    parameters: list[str],
-    config: dict,
-) -> str:
-    """Constroi URL para a API NASA POWER."""
-    params_str = ",".join(parameters)
-    url = (
-        f"{config['api']['base_url']}"
-        f"?parameters={params_str}"
-        f"&community={config['api']['community']}"
-        f"&longitude={lon:.4f}"
-        f"&latitude={lat:.4f}"
-        f"&start={start_date}"
-        f"&end={end_date}"
-        f"&format={config['api']['format']}"
-    )
-    return url
+COLUMN_RENAME = {
+    "data": "date",
+    "temp_min": "tmin",
+    "temp_media": "tmean",
+    "temp_max": "tmax",
+    "precip_mm": "precip",
+    "umidade_rel": "rh",
+    "radiacao_mj": "radiation",
+    "vento_ms": "wind_speed",
+}
 
 
-def download_climate_for_municipality(
-    cod_ibge: int,
-    lat: float,
-    lon: float,
-    config: dict,
+async def download_climate_for_municipality(
+    cod_ibge: int, lat: float, lon: float, config: dict
 ) -> pd.DataFrame | None:
-    """Baixa dados climaticos para um municipio."""
-    start_date = f"{config['year_start']}0101"
-    end_date = f"{config['year_end']}1231"
+    """Baixa dados climaticos para um municipio via agrobr."""
+    from agrobr.nasa_power import clima_ponto
 
-    url = build_power_url(lat, lon, start_date, end_date, config["parameters"], config)
+    inicio = f"{config['year_start']}-01-01"
+    fim = f"{config['year_end']}-12-31"
 
-    retry_attempts = config["rate_limit"]["retry_attempts"]
-    backoff_factor = config["rate_limit"]["backoff_factor"]
-
-    for attempt in range(retry_attempts):
-        try:
-            response = requests.get(url, timeout=120)
-            response.raise_for_status()
-            data = response.json()
-
-            if "properties" not in data or "parameter" not in data["properties"]:
-                logger.warning(f"cod_ibge={cod_ibge}: resposta sem dados")
-                return None
-
-            params = data["properties"]["parameter"]
-
-            records = []
-            first_param = list(params.keys())[0]
-            for date_str, _ in params[first_param].items():
-                record = {"date": date_str}
-                for param_name, param_values in params.items():
-                    value = param_values.get(date_str)
-                    if value == -999 or value == -999.0:
-                        value = None
-                    record[param_name] = value
-                records.append(record)
-
-            df = pd.DataFrame(records)
-
-            if len(df) == 0:
-                logger.warning(f"cod_ibge={cod_ibge}: DataFrame vazio")
-                return None
-
-            df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
-            df["cod_ibge"] = cod_ibge
-
-            col_rename = {
-                "T2M": "tmean",
-                "T2M_MIN": "tmin",
-                "T2M_MAX": "tmax",
-                "PRECTOTCORR": "precip",
-                "RH2M": "rh",
-            }
-            df = df.rename(columns=col_rename)
-
-            return df
-
-        except requests.exceptions.HTTPError as e:
-            if response.status_code == 429:
-                wait_time = backoff_factor ** (attempt + 1)
-                logger.warning(f"Rate limit atingido, aguardando {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                logger.warning(f"cod_ibge={cod_ibge}: HTTP {response.status_code} - {e}")
-                return None
-
-        except requests.exceptions.RequestException as e:
-            wait_time = backoff_factor ** (attempt + 1)
-            logger.warning(
-                f"cod_ibge={cod_ibge}: erro na requisicao (tentativa {attempt + 1}) - {e}"
-            )
-            if attempt < retry_attempts - 1:
-                time.sleep(wait_time)
-
-        except Exception as e:
-            logger.warning(f"cod_ibge={cod_ibge}: erro inesperado - {e}")
-            return None
-
-    return None
+    try:
+        df = await clima_ponto(lat, lon, inicio, fim, agregacao="diario")
+        df = df.rename(columns=COLUMN_RENAME)
+        df["cod_ibge"] = cod_ibge
+        df["date"] = pd.to_datetime(df["date"])
+        return df
+    except Exception as e:
+        logger.warning(f"cod_ibge={cod_ibge}: erro - {e}")
+        return None
 
 
 def calculate_statistics(df: pd.DataFrame) -> dict:
     """Calcula estatisticas do dataset climatico."""
-    stats = {
+    return {
         "total_registros": len(df),
         "municipios_unicos": df["cod_ibge"].nunique(),
         "periodo": {
             "min": str(df["date"].min().date()),
             "max": str(df["date"].max().date()),
         },
-        "tmean": {
-            "min": float(df["tmean"].min()) if "tmean" in df.columns else None,
-            "max": float(df["tmean"].max()) if "tmean" in df.columns else None,
-            "nulls": int(df["tmean"].isna().sum()) if "tmean" in df.columns else None,
-        },
-        "precip": {
-            "min": float(df["precip"].min()) if "precip" in df.columns else None,
-            "max": float(df["precip"].max()) if "precip" in df.columns else None,
-            "nulls": int(df["precip"].isna().sum()) if "precip" in df.columns else None,
-        },
     }
-    return stats
+
+
+async def _fetch_one(row: dict, config: dict, semaphore: asyncio.Semaphore, progress: dict):
+    """Baixa clima para um municipio com semaphore para rate limiting."""
+    async with semaphore:
+        cod_ibge = row["cod_ibge"]
+        df = await download_climate_for_municipality(cod_ibge, row["lat"], row["lon"], config)
+        progress["done"] += 1
+        if df is not None:
+            save_to_cache(df, cod_ibge, CACHE_DIR)
+            progress["success"] += 1
+            logger.info(
+                f"  [{progress['done']}/{progress['total']}] {cod_ibge}: OK ({len(df)} dias)"
+            )
+        else:
+            progress["failed"] += 1
+            logger.warning(f"  [{progress['done']}/{progress['total']}] {cod_ibge}: FALHOU")
+
+
+async def _fetch_all(pending_rows: list[dict], config: dict, semaphore: asyncio.Semaphore):
+    """Baixa clima para todos os municipios pendentes com concorrencia real."""
+    progress = {"done": 0, "success": 0, "failed": 0, "total": len(pending_rows)}
+    tasks = [_fetch_one(row, config, semaphore, progress) for row in pending_rows]
+    await asyncio.gather(*tasks)
+    return progress["success"], progress["failed"]
 
 
 def fetch_climate_for_municipalities(
@@ -153,12 +94,11 @@ def fetch_climate_for_municipalities(
 ) -> tuple[pd.DataFrame, dict]:
     """Pipeline principal de ingestao de clima."""
     logger.info("=" * 60)
-    logger.info("INGESTAO CLIMA - NASA POWER")
+    logger.info("INGESTAO CLIMA - NASA POWER (via agrobr)")
     logger.info("=" * 60)
 
     config = load_config("climate", section="climate")
     logger.info(f"Periodo: {config['year_start']} - {config['year_end']}")
-    logger.info(f"Parametros: {config['parameters']}")
 
     df_mun = load_municipalities()
     logger.info(f"Municipios disponiveis: {len(df_mun):,}")
@@ -170,7 +110,6 @@ def fetch_climate_for_municipalities(
 
     if max_municipalities is not None:
         df_mun = df_mun.head(max_municipalities)
-        logger.info(f"Limitado a {max_municipalities} municipios para teste")
 
     cached = get_cached_codes(CACHE_DIR)
     logger.info(f"Municipios ja em cache: {len(cached):,}")
@@ -178,69 +117,39 @@ def fetch_climate_for_municipalities(
     pending = df_mun[~df_mun["cod_ibge"].isin(cached)]
     logger.info(f"Municipios pendentes: {len(pending):,}")
 
-    requests_per_minute = config["rate_limit"]["requests_per_minute"]
-    delay = 60.0 / requests_per_minute
+    if len(pending) > 0:
+        requests_per_minute = config.get("rate_limit", {}).get("requests_per_minute", 30)
+        semaphore = asyncio.Semaphore(requests_per_minute)
+        pending_rows = pending[["cod_ibge", "lat", "lon"]].to_dict("records")
+        success, failed = asyncio.run(_fetch_all(pending_rows, config, semaphore))
+        logger.info(f"Download: {success} sucesso, {failed} falha")
 
-    success = 0
-    failed = 0
-    failed_list = []
-
-    for _, row in pending.iterrows():
-        cod_ibge = row["cod_ibge"]
-        lat = row["lat"]
-        lon = row["lon"]
-
-        df_climate = download_climate_for_municipality(cod_ibge, lat, lon, config)
-
-        if df_climate is not None:
-            save_to_cache(df_climate, cod_ibge, CACHE_DIR)
-            success += 1
-            logger.info(
-                f"[{success + failed}/{len(pending)}] cod_ibge={cod_ibge}: OK ({len(df_climate)} dias)"
-            )
-        else:
-            failed += 1
-            failed_list.append(cod_ibge)
-            logger.warning(f"[{success + failed}/{len(pending)}] cod_ibge={cod_ibge}: FALHOU")
-
-        time.sleep(delay)
-
-    logger.info("\n" + "=" * 60)
-    logger.info("DOWNLOAD CONCLUIDO")
-    logger.info("=" * 60)
-    logger.info(f"Sucesso: {success:,}")
-    logger.info(f"Falha: {failed:,}")
-
-    if failed_list:
-        logger.info(f"Municipios com falha: {failed_list[:20]}...")
-
-    logger.info("\nConsolidando cache...")
+    logger.info("Consolidando cache...")
     df_consolidated = consolidate_cache(CACHE_DIR)
-
     df_consolidated = df_consolidated.sort_values(["cod_ibge", "date"]).reset_index(drop=True)
 
-    cols = ["cod_ibge", "date", "tmin", "tmean", "tmax", "precip", "rh"]
-    cols = [c for c in cols if c in df_consolidated.columns]
-    df_consolidated = df_consolidated[cols]
+    output_cols = [
+        "cod_ibge",
+        "date",
+        "tmin",
+        "tmean",
+        "tmax",
+        "precip",
+        "rh",
+        "radiation",
+        "wind_speed",
+    ]
+    output_cols = [c for c in output_cols if c in df_consolidated.columns]
+    df_consolidated = df_consolidated[output_cols]
 
     stats = calculate_statistics(df_consolidated)
-
-    logger.info("\n" + "=" * 60)
-    logger.info("ESTATISTICAS DO DATASET")
-    logger.info("=" * 60)
-    logger.info(f"Total de registros: {stats['total_registros']:,}")
-    logger.info(f"Municipios unicos: {stats['municipios_unicos']:,}")
-    logger.info(f"Periodo: {stats['periodo']['min']} a {stats['periodo']['max']}")
+    logger.info(
+        f"Total: {stats['total_registros']:,} registros, {stats['municipios_unicos']:,} municipios"
+    )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df_consolidated.to_parquet(OUTPUT_PATH, index=False)
-    logger.info(f"\nArquivo salvo: {OUTPUT_PATH}")
-
-    total_expected = len(df_mun)
-    total_cached = df_consolidated["cod_ibge"].nunique()
-    success_rate = 100 * total_cached / total_expected if total_expected > 0 else 0
-
-    logger.info(f"\nTaxa de cobertura: {success_rate:.1f}% ({total_cached}/{total_expected})")
+    logger.info(f"Arquivo salvo: {OUTPUT_PATH}")
 
     return df_consolidated, stats
 

@@ -21,7 +21,7 @@ RESULTS_PATH = PROJECT_ROOT / "results"
 DATA_PATH = PROJECT_ROOT / "data" / "processed"
 
 
-def load_model(version: str = "v1"):
+def load_model(version: str = "v2"):
     """Carrega modelo treinado."""
     model_path = MODELS_PATH / f"model_{version}.pkl"
     with open(model_path, "rb") as f:
@@ -321,7 +321,7 @@ def generate_evaluation_report(
     return "\n".join(report)
 
 
-def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
+def run_full_evaluation(model_version: str = "v2") -> dict[str, Any]:
     """Executa avaliacao completa do modelo."""
     logger.info("=" * 60)
     logger.info("AVALIACAO COMPLETA DO MODELO")
@@ -451,7 +451,7 @@ def run_full_evaluation(model_version: str = "v1") -> dict[str, Any]:
 
 def main() -> None:
     """Pipeline principal de avaliacao."""
-    run_full_evaluation(model_version="v1")
+    run_full_evaluation(model_version="v2")
 
 
 if __name__ == "__main__":

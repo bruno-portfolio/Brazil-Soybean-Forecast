@@ -151,6 +151,10 @@ features:
       type: linear_trend
       normalize: true  # Ano normalizado [0, 1]
 
+  # Referencias para normalizacao do trend (fixas para comparabilidade entre modelos)
+  trend_ref_year_min: 2000
+  trend_ref_year_max: 2025
+
   # Tratamento de missing
   missing:
     strategy: "drop"  # ou "impute"

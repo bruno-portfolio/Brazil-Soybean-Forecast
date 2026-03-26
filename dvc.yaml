@@ -47,10 +47,48 @@ stages:
       - data/processed/ndvi_safra.parquet
     cache: true
 
+  ingest_pivos:
+    cmd: python -m src.ingest.pivos
+    deps:
+      - src/ingest/pivos.py
+      - data/processed/municipalities.parquet
+    outs:
+      - data/processed/pivos_irrigacao.parquet
+    cache: true
+
+  ingest_fertilizante:
+    cmd: python -m src.ingest.fertilizante
+    deps:
+      - src/ingest/fertilizante.py
+      - configs/target.yaml
+    outs:
+      - data/processed/fertilizante_uf.parquet
+    cache: true
+
+  ingest_seguro_rural:
+    cmd: python -m src.ingest.seguro_rural
+    deps:
+      - src/ingest/seguro_rural.py
+      - configs/target.yaml
+    outs:
+      - data/processed/seguro_rural.parquet
+    cache: true
+
+  ingest_mapbiomas:
+    cmd: python -m src.ingest.mapbiomas_soja
+    deps:
+      - src/ingest/mapbiomas_soja.py
+      - data/processed/municipalities.parquet
+    outs:
+      - data/processed/mapbiomas_soja.parquet
+    cache: true
+
   build_features:
     cmd: python -m src.features.build_features
     deps:
       - src/features/build_features.py
+      - src/common/water_balance.py
+      - src/common/new_source_features.py
       - configs/features.yaml
       - data/processed/target_soja.parquet
       - data/processed/climate_daily.parquet
@@ -67,7 +105,7 @@ stages:
       - configs/split.yaml
       - data/processed/dataset_final.parquet
     outs:
-      - models/model_v1.pkl
+      - models/model_v2.pkl
     metrics:
       - results/metrics.json:
           cache: false
@@ -76,7 +114,7 @@ stages:
     cmd: python -m src.evaluation.evaluate
     deps:
       - src/evaluation/evaluate.py
-      - models/model_v1.pkl
+      - models/model_v2.pkl
       - data/processed/dataset_final.parquet
     plots:
       - results/predictions_scatter.png:
@@ -89,7 +127,7 @@ stages:
     cmd: python -m src.evaluation.explainability
     deps:
       - src/evaluation/explainability.py
-      - models/model_v1.pkl
+      - models/model_v2.pkl
       - data/processed/dataset_final.parquet
     plots:
       - results/shap_summary.png:
@@ -101,7 +139,9 @@ stages:
     cmd: python -m src.inference.predict
     deps:
       - src/inference/predict.py
-      - models/model_v1.pkl
+      - src/common/water_balance.py
+      - src/common/new_source_features.py
+      - models/model_v2.pkl
       - data/processed/climate_daily.parquet
     outs:
       - results/predictions_2024_2025.parquet

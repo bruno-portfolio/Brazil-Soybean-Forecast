@@ -281,17 +281,27 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
     return result
 
 
-def main() -> None:
+def main(version: str = "v2") -> None:
     """Pipeline principal de treinamento."""
-    result = train_and_evaluate(version="v1")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    result = train_and_evaluate(version=version)
 
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
-    result_path = RESULTS_PATH / "training_result.json"
+    result_path = RESULTS_PATH / f"training_result_{version}.json"
     with open(result_path, "w") as f:
+        json.dump(asdict(result), f, indent=2, default=str)
+
+    # Manter compatibilidade: training_result.json aponta para versao mais recente
+    compat_path = RESULTS_PATH / "training_result.json"
+    with open(compat_path, "w") as f:
         json.dump(asdict(result), f, indent=2, default=str)
 
     logger.info(f"\nResultado salvo em: {result_path}")
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    version = sys.argv[1] if len(sys.argv) > 1 else "v2"
+    main(version=version)

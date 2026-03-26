@@ -7,9 +7,6 @@ pyarrow>=14.0.0
 # Data validation
 pandera>=0.18.0
 
-# Logging
-loguru>=0.7.0
-
 # Machine Learning
 lightgbm>=4.0.0
 xgboost>=2.0.0
