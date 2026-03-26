@@ -19,6 +19,12 @@
 - Conformal prediction intervals (95.6% coverage in South, 92.3% in Cerrado at 90% nominal)
 - DVC-orchestrated pipeline with 12 reproducible stages
 
+<img width="1572" height="970" alt="readme_model_comparison" src="https://github.com/user-attachments/assets/fc6ab88a-092a-4d93-bb27-7aaf220a37c2" />
+<img width="1573" height="970" alt="readme_regional_performance" src="https://github.com/user-attachments/assets/0f916b93-ffe2-4e69-96dc-edd81e4ce30e" />
+<img width="1772" height="1371" alt="readme_feature_importance" src="https://github.com/user-attachments/assets/044bf2e8-b881-49ed-88c5-a22fd1e7d845" />
+<img width="2204" height="1127" alt="readme_scatter" src="https://github.com/user-attachments/assets/f6b08a43-52dd-4f9f-9011-c56f1f2d9531" />
+<img width="2373" height="970" alt="readme_error_by_year" src="https://github.com/user-attachments/assets/425dc596-9078-4b12-a71f-038f9981fec1" />
+
 ---
 
 ## Results
