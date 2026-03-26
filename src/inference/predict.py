@@ -585,14 +585,13 @@ def main():
 
     df = add_enso_interactions(df)
 
-    if not use_regional:
-        if SOIL_PATH.exists():
-            logger.info("Carregando dados de solo para modelo v1...")
-            df_soil = pd.read_parquet(SOIL_PATH)
-            df = add_soil_features(df, df_soil)
-            df = add_soil_climate_interactions(df)
-        else:
-            logger.warning("soil_properties.parquet nao encontrado, solo nao sera adicionado")
+    if SOIL_PATH.exists():
+        logger.info("Carregando dados de solo...")
+        df_soil = pd.read_parquet(SOIL_PATH)
+        df = add_soil_features(df, df_soil)
+        df = add_soil_climate_interactions(df)
+    else:
+        logger.warning("soil_properties.parquet nao encontrado, solo nao sera adicionado")
 
     from src.common.new_source_features import (
         add_fertilizante_features,

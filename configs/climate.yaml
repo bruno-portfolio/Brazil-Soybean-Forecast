@@ -18,7 +18,7 @@ climate:
 
   # Periodo temporal (alinhado com target)
   year_start: 1999  # Um ano antes para permitir features lag
-  year_end: 2025
+  year_end: 2026
 
   # Cache
   cache:
