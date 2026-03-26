@@ -64,7 +64,9 @@ def main():
     logger.info("=" * 60)
 
     config = load_config("target", section="target")
-    df = asyncio.run(fetch_seguro_rural(config["year_start"], config["year_end"]))
+    # PSR disponivel a partir de 2006
+    year_start = max(config["year_start"], 2006)
+    df = asyncio.run(fetch_seguro_rural(year_start, config["year_end"]))
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUTPUT_PATH, index=False)

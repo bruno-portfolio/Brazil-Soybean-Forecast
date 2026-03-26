@@ -12,16 +12,10 @@ from src.common.features import (
 )
 from src.common.io import PROJECT_ROOT, load_config
 from src.common.phenology import (
-    aggregate_season_climate,
-    calculate_gdd,
     filter_phenology_window,
     filter_phenology_window_regional,
     get_default_phenology,
     get_regional_phenology,
-)
-from src.common.water_balance import (
-    calculate_water_balance_by_phase,
-    calculate_water_balance_metrics,
 )
 
 logger = logging.getLogger(__name__)
@@ -316,7 +310,9 @@ def main():
     else:
         df_climate_window = filter_phenology_window(df_climate, start_month, end_month)
 
-    df_climate_agg = aggregate_climate_features_by_phase(
+    from src.common.climate_aggregation import aggregate_climate_duckdb
+
+    df_climate_agg = aggregate_climate_duckdb(
         df_climate_window, base_temp, hot_threshold, lat_lookup=lat_lookup
     )
 
@@ -462,7 +458,7 @@ def main():
 
     new_source_cols = [
         "pct_irrigado",
-        "fert_total_safra_uf",
+        "fert_total_br_ton",
         "sinistro_rate_3yr",
         "pct_soja",
     ]

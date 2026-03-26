@@ -45,7 +45,7 @@ def add_irrigacao_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_fertilizante_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona fert_total_safra_uf (ton fertilizante por UF-ano)."""
+    """Adiciona fert_total_br_ton (ton fertilizante Brasil por ano)."""
     if not FERT_PATH.exists():
         logger.info("fertilizante_uf.parquet nao encontrado, pulando fertilizante")
         return df
@@ -53,16 +53,23 @@ def add_fertilizante_features(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("Adicionando features de fertilizante...")
     df_fert = pd.read_parquet(FERT_PATH)
 
-    df["_uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
-    df = df.merge(
-        df_fert.rename(columns={"fert_total_ton": "fert_total_safra_uf"}),
-        left_on=["_uf_cod", "ano"],
-        right_on=["uf_cod", "ano"],
-        how="left",
-    )
-    df = df.drop(columns=["_uf_cod", "uf_cod"], errors="ignore")
+    if "fert_total_br_ton" in df_fert.columns:
+        df = df.merge(df_fert[["ano", "fert_total_br_ton"]], on="ano", how="left")
+        # Normalizar para escala comparavel (milhoes de ton)
+        if "fert_total_br_ton" in df.columns:
+            df["fert_total_br_ton"] = df["fert_total_br_ton"] / 1e6
+    elif "fert_total_ton" in df_fert.columns:
+        # Compatibilidade com formato antigo por UF
+        df["_uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
+        df = df.merge(
+            df_fert.rename(columns={"fert_total_ton": "fert_total_br_ton"}),
+            left_on=["_uf_cod", "ano"],
+            right_on=["uf_cod", "ano"],
+            how="left",
+        )
+        df = df.drop(columns=["_uf_cod", "uf_cod"], errors="ignore")
 
-    n_with = df["fert_total_safra_uf"].notna().sum()
+    n_with = df.get("fert_total_br_ton", pd.Series()).notna().sum()
     logger.info(f"  Registros com dados fertilizante: {n_with:,}")
 
     return df
@@ -126,8 +133,8 @@ def add_new_source_interactions(df: pd.DataFrame) -> pd.DataFrame:
         df["irrigacao_x_deficit"] = df["pct_irrigado"] * deficit_norm
         n_added += 1
 
-    if "fert_total_safra_uf" in df.columns and "precip_anomaly" in df.columns:
-        fert_norm = df["fert_total_safra_uf"].fillna(0) / (df["fert_total_safra_uf"].std() + 1e-8)
+    if "fert_total_br_ton" in df.columns and "precip_anomaly" in df.columns:
+        fert_norm = df["fert_total_br_ton"].fillna(0) / (df["fert_total_br_ton"].std() + 1e-8)
         df["fert_x_precip"] = fert_norm * df["precip_anomaly"].fillna(0)
         n_added += 1
 

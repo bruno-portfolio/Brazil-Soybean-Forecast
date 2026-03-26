@@ -60,20 +60,18 @@ async def fetch_fertilizante(year_start: int, year_end: int) -> pd.DataFrame:
 
     if not all_dfs:
         logger.warning("Nenhum dado ANDA obtido")
-        return pd.DataFrame(columns=["uf_cod", "ano", "fert_total_ton"])
+        return pd.DataFrame(columns=["ano", "fert_total_br_ton"])
 
     df = pd.concat(all_dfs, ignore_index=True)
 
-    df_agg = df.groupby(["uf", "ano"]).agg(fert_total_ton=("volume_ton", "sum")).reset_index()
-
-    df_agg["uf_cod"] = df_agg["uf"].map(UF_TO_CODE)
-    df_agg = df_agg.dropna(subset=["uf_cod"])
-    df_agg["uf_cod"] = df_agg["uf_cod"].astype(int)
+    # ANDA PDFs so tem dados nivel Brasil, entao agregamos por ano
+    df_agg = df.groupby("ano").agg(fert_total_br_ton=("volume_ton", "sum")).reset_index()
     df_agg["ano"] = df_agg["ano"].astype(int)
 
-    logger.info(f"  Total: {len(df_agg):,} registros UF-ano")
+    logger.info(f"  Total: {len(df_agg):,} anos")
+    logger.info(f"  Volume medio: {df_agg['fert_total_br_ton'].mean():,.0f} ton/ano")
 
-    return df_agg[["uf_cod", "ano", "fert_total_ton"]]
+    return df_agg[["ano", "fert_total_br_ton"]]
 
 
 def main():

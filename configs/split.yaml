@@ -2,15 +2,15 @@
 split:
   # Split estritamente temporal (sem leakage)
   train:
-    end_year: 2018  # Treino: <= 2018
+    end_year: 2021  # Treino: <= 2021 (expandido para incluir features novas)
 
   validation:
-    start_year: 2019
-    end_year: 2021  # Validacao: 2019-2021
+    start_year: 2022
+    end_year: 2022  # Validacao: 2022 (ano da seca RS - caso mais dificil)
 
   test:
-    start_year: 2022
-    end_year: 2023  # Teste: 2022-2023
+    start_year: 2023
+    end_year: 2023  # Teste: 2023 (ultimo ano com dados reais)
 
   # Anos para inferencia futura
   inference:

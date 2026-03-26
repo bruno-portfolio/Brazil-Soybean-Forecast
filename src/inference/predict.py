@@ -622,16 +622,20 @@ def main():
 
     municipalities = get_soy_producing_municipalities(df_target, min_years=3)
 
+    from src.common.climate_aggregation import aggregate_climate_duckdb
+
     hist_start = min(years_to_predict) - 6
     all_years = list(range(hist_start, min(years_to_predict))) + years_to_predict
-    df_all = prepare_climate_features(
-        df_climate,
-        municipalities,
-        all_years,
-        base_temp=base_temp,
-        hot_threshold=hot_threshold,
-        lat_lookup=lat_lookup,
+
+    df_filtered = df_climate[df_climate["cod_ibge"].isin(municipalities)].copy()
+    df_filtered = filter_phenology_window_regional(
+        df_filtered,
+        get_regional_phenology(features_config),
+        get_default_phenology(features_config),
     )
+    df_filtered = df_filtered[df_filtered["crop_year"].isin(all_years)]
+
+    df_all = aggregate_climate_duckdb(df_filtered, base_temp, hot_threshold, lat_lookup=lat_lookup)
 
     df_all = add_enso_features(df_all, df_enso)
 

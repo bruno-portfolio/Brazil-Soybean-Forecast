@@ -71,8 +71,8 @@ def prepare_data(
     feature_cols: list[str],
     target_col: str = "produtividade_kg_ha",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Prepara dados para treinamento."""
-    df_clean = split_data.dropna(subset=feature_cols + [target_col])
+    """Prepara dados para treinamento. LightGBM lida com NaN nativamente."""
+    df_clean = split_data.dropna(subset=[target_col])
 
     X = df_clean[feature_cols].values
     y = df_clean[target_col].values
@@ -179,6 +179,13 @@ def train_and_evaluate(version: str = "v1") -> TrainingResult:
     split = create_temporal_split()
 
     feature_cols = get_feature_columns(split.train)
+
+    # Remover features 100% NaN (fontes de dados ausentes)
+    all_nan_cols = [c for c in feature_cols if split.train[c].isna().all()]
+    if all_nan_cols:
+        logger.warning(f"\nRemovendo {len(all_nan_cols)} features 100% NaN: {all_nan_cols}")
+        feature_cols = [c for c in feature_cols if c not in all_nan_cols]
+
     logger.info(f"\nFeatures ({len(feature_cols)}):")
     for col in feature_cols:
         logger.info(f"  - {col}")
