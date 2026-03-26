@@ -87,8 +87,8 @@ def prepare_data(
     feature_cols: list[str],
     target_col: str = "produtividade_kg_ha",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Prepara dados para treinamento."""
-    df_clean = df.dropna(subset=feature_cols + [target_col])
+    """Prepara dados para treinamento. Dropa apenas target NaN (LightGBM lida com NaN em features)."""
+    df_clean = df.dropna(subset=[target_col])
     X = df_clean[feature_cols].values
     y = df_clean[target_col].values
     return X, y

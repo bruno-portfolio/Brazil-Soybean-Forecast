@@ -3,19 +3,20 @@
 ![CI](https://github.com/bruno-portfolio/Brazil-Soybean-Forecast/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Model MAE](https://img.shields.io/badge/MAE-410_kg%2Fha-brightgreen)
-![Features](https://img.shields.io/badge/Features-100-orange)
+![Model MAE](https://img.shields.io/badge/MAE-409_kg%2Fha-brightgreen)
+![Features](https://img.shields.io/badge/Features-111-orange)
 ![LightGBM](https://img.shields.io/badge/LightGBM-Regional-9cf)
 
 ## TL;DR
 
 **Problem:** Agricultural cooperatives and credit banks need accurate municipality-level soybean yield estimates for crop insurance pricing, credit limits, and early warning of problematic harvests — but currently rely on subjective estimates or historical averages that ignore climate and regional variations.
 
-**Solution:** End-to-end ML pipeline combining 9 public data sources (IBGE, NASA POWER, SoilGrids, ENSO, MapBiomas, and more) to predict yield in kg/ha with **MAE of 410 kg/ha (~6.8 bags/ha)**, calibrated confidence intervals via conformal prediction, and automatic translation to credit risk language.
+**Solution:** End-to-end ML pipeline combining 9 public data sources (IBGE, NASA POWER, SoilGrids, ENSO, MapBiomas, and more) to predict yield in kg/ha with **MAE of 409 kg/ha (~6.8 bags/ha)**, validated across **8 independent harvest seasons** via temporal cross-validation, with calibrated confidence intervals and automatic translation to credit risk language.
 
 **Key Features:**
 - Regional LightGBM models (South vs Cerrado) with specialized regularization
-- 100 engineered features: water balance, soil interactions, ENSO teleconnections, phenological phases
+- 111 engineered features: water balance, soil interactions, ENSO teleconnections, municipality history, NDVI
+- Expanding-window temporal CV (2016-2023): **MAE 429 +/- 63 kg/ha across 8 folds**
 - Conformal prediction intervals (95.6% coverage in South, 92.3% in Cerrado at 90% nominal)
 - DVC-orchestrated pipeline with 12 reproducible stages
 
@@ -33,23 +34,39 @@
 
 | Model | MAE (kg/ha) | MAE (sacas/ha) | vs Baseline |
 |-------|-------------|----------------|-------------|
-| 3-Year Moving Average (MA3) | 439 | 7.3 | baseline |
-| LightGBM (Global) | 417 | 6.9 | -5.0% |
-| **Regional LightGBM** | **410** | **6.8** | **-6.6%** |
+| 3-Year Moving Average (MA3) | 438 | 7.3 | baseline |
+| LightGBM (Global) | 417 | 6.9 | -4.9% |
+| **Regional LightGBM** | **409** | **6.8** | **-6.7%** |
 
 ### Performance by Region
 
 | Region | Baseline MAE | Model MAE | Improvement |
 |--------|--------------|-----------|-------------|
-| **South** (RS, PR, SC) | 587 kg/ha | 561 kg/ha | **-4.4%** |
-| **Cerrado** (MT, GO, MS, etc.) | 330 kg/ha | 299 kg/ha | **-9.5%** |
-| **Combined** | 439 kg/ha | 410 kg/ha | **-6.6%** |
+| **South** (RS, PR, SC) | 582 kg/ha | 558 kg/ha | **-4.1%** |
+| **Cerrado** (MT, GO, MS, etc.) | 340 kg/ha | 309 kg/ha | **-9.3%** |
+| **Combined** | 438 kg/ha | 409 kg/ha | **-6.7%** |
 
-*Test set: 2,303 municipality-year observations (2023 harvest season)*
+*Test set: 2,603 municipality-year observations (2023 harvest season)*
+
+### Temporal Cross-Validation (Expanding Window)
+
+| Test Year | MAE (kg/ha) | MAPE (%) | n |
+|-----------|-------------|----------|---|
+| 2016 | 359 | 15.9 | 2,160 |
+| 2017 | 448 | 14.5 | 2,275 |
+| 2018 | 415 | 12.8 | 2,319 |
+| 2019 | 408 | 17.1 | 2,369 |
+| 2020 | 472 | 19.6 | 2,388 |
+| 2021 | 356 | 11.6 | 2,472 |
+| 2022 | 563 | 46.4 | 2,525 |
+| 2023 | 409 | 17.1 | 2,603 |
+| **Mean +/- Std** | **429 +/- 63** | **19.4** | |
+
+*Each fold trains from scratch on years <= test_year - 2, validates on test_year - 1*
 
 ### Feature Importance
 
-Top drivers: historical yield momentum (lag1, MA3, trend) accounts for ~50% of model gain. Water deficit at grain fill (`deficit_ratio_enchimento`) is the strongest climate signal at 6%, followed by solar radiation and precipitation variability.
+Top drivers: temporal trend, previous-year yield (`lag1`, `MA3`) and **municipality historical mean** (new in v3) account for ~55% of model gain. `mun_yield_hist_mean` captures the baseline productivity of each municipality (technology, soil management, farming maturity). Water deficit at grain fill (`deficit_ratio_enchimento`) is the strongest climate signal at 3.6%, followed by solar radiation and precipitation variability.
 
 ---
 
@@ -102,7 +119,7 @@ Brazil-Soybean-Forecast/
 ├── data/
 │   ├── raw/                       # Raw API downloads (cached)
 │   └── processed/                 # Feature-engineered datasets
-│       ├── dataset_final.parquet  # Main dataset (48K rows, 106 cols)
+│       ├── dataset_final.parquet  # Main dataset (48K rows, 117 cols)
 │       ├── climate_daily.parquet  # NASA POWER daily climate
 │       ├── soil_properties.parquet
 │       ├── target_soja.parquet
@@ -122,7 +139,7 @@ Brazil-Soybean-Forecast/
 │   │   ├── ndvi_gee.py            # MODIS NDVI via Google Earth Engine
 │   │   └── enso.py                # NOAA ONI climate indices
 │   ├── features/
-│   │   └── build_features.py      # Feature engineering (100 features)
+│   │   └── build_features.py      # Feature engineering (111 features)
 │   ├── common/                    # Shared utilities
 │   │   ├── water_balance.py       # ETo (Hargreaves/Penman-Monteith)
 │   │   ├── phenology.py           # Regional phenological calendars
@@ -152,7 +169,7 @@ Brazil-Soybean-Forecast/
 
 ---
 
-## Features (100 total)
+## Features (111 total)
 
 ### Climate Features (by phenological phase)
 | Category | Count | Examples |
@@ -180,12 +197,24 @@ Brazil-Soybean-Forecast/
 | `oni_avg`, `oni_std` | Oceanic Nino Index (mean, variability) |
 | `is_la_nina`, `is_el_nino` | Binary ENSO flags |
 
-### Historical & Temporal (3)
+### Historical & Municipality Identity (5)
 | Feature | Description |
 |---------|-------------|
 | `produtividade_lag1` | Previous year yield |
 | `produtividade_ma3` | 3-year moving average |
 | `trend` | Temporal trend (technological progress) |
+| `mun_yield_hist_mean` | Expanding historical mean yield per municipality (no leakage) |
+| `mun_yield_volatility` | Historical yield coefficient of variation per municipality |
+
+### NDVI Vegetation Index (9)
+| Feature | Description |
+|---------|-------------|
+| `ndvi_mean_safra` | Mean NDVI for entire growing season |
+| `ndvi_max_safra`, `ndvi_min_safra` | Peak and minimum vegetation vigor |
+| `ndvi_amplitude` | Seasonal NDVI range |
+| `ndvi_plantio`, `ndvi_vegetativo`, `ndvi_enchimento` | NDVI by phenological phase |
+| `ndvi_x_precip_deficit` | NDVI x precipitation anomaly interaction |
+| `ndvi_ench_x_la_nina` | Grain-fill NDVI under La Nina stress |
 
 ### New Data Sources (4)
 | Feature | Source | Description |
@@ -207,7 +236,7 @@ Climate anomalies, ENSO interactions (`la_nina_x_deficit`, `terminal_drought_str
 ```
                     +------------------+
                     |   Input Data     |
-                    |  (100 features)  |
+                    |  (111 features)  |
                     +--------+---------+
                              |
               +--------------+--------------+
@@ -272,6 +301,8 @@ Climate anomalies, ENSO interactions (`la_nina_x_deficit`, `terminal_drought_str
 
 *Strictly temporal split — no future information leaks into training*
 
+Additionally, **expanding-window temporal CV** validates the model across 8 independent test years (2016-2023), training from scratch for each fold. This provides confidence that results are not specific to a single test year.
+
 ---
 
 ## Known Limitations
@@ -288,7 +319,14 @@ Climate anomalies, ENSO interactions (`la_nina_x_deficit`, `terminal_drought_str
 
 ## Changelog
 
-### v2.0 (Current)
+### v3.0 (Current)
+- 111 features (up from 100): municipality identity, NDVI vegetation index
+- `mun_yield_hist_mean` (expanding historical mean per municipality) — top 4 feature importance
+- NDVI features from MODIS satellite (7 direct + 2 interaction features)
+- Expanding-window temporal cross-validation across 8 harvest seasons (2016-2023)
+- LightGBM native NaN handling (no more row dropping for sparse features)
+
+### v2.0
 - Regional LightGBM models (South vs Cerrado) replacing single global model
 - 100 features (up from 76): water balance, soil interactions, new data sources
 - 5 new data sources: SoilGrids, ANA pivots, ComexStat, MAPA PSR, MapBiomas
