@@ -21,8 +21,11 @@ jobs:
       - name: Install linters
         run: pip install ruff
 
-      - name: Run ruff
-        run: ruff check src/ scripts/ --ignore=E501,F401,E402
+      - name: Run ruff (lint)
+        run: ruff check src/ scripts/
+
+      - name: Run ruff (format check)
+        run: ruff format --check src/ scripts/
 
   test:
     name: Tests

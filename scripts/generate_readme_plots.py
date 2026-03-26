@@ -138,7 +138,7 @@ ax.annotate(
     fontsize=10,
     color=C_GREEN,
     fontweight="bold",
-    arrowprops=dict(arrowstyle="->", color=C_GREEN, lw=1.5),
+    arrowprops={"arrowstyle": "->", "color": C_GREEN, "lw": 1.5},
 )
 
 plt.tight_layout()
@@ -246,7 +246,7 @@ for ax, y_true, y_p, title, color in [
         transform=ax.transAxes,
         fontsize=10,
         verticalalignment="top",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.8),
+        bbox={"boxstyle": "round,pad=0.4", "facecolor": "white", "alpha": 0.8},
     )
 
     ax.set_xlabel("Actual Yield (kg/ha)")
