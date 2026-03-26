@@ -3,8 +3,8 @@
 ![CI](https://github.com/bruno-portfolio/Brazil-Soybean-Forecast/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Model MAE](https://img.shields.io/badge/MAE-485_kg%2Fha-brightgreen)
-![Features](https://img.shields.io/badge/Features-94-orange)
+![Model MAE](https://img.shields.io/badge/MAE-411_kg%2Fha-brightgreen)
+![Features](https://img.shields.io/badge/Features-101-orange)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white)
 ![LightGBM](https://img.shields.io/badge/LightGBM-Ensemble-9cf)
 ![XGBoost](https://img.shields.io/badge/XGBoost-Ensemble-blue)
@@ -34,7 +34,7 @@
 |--------|--------|-------|--------|
 | **Architecture** | Single LightGBM | Ensemble (LightGBM + XGBoost) | More robust predictions |
 | **Regional Split** | One model for all | South vs Cerrado specialized | +16% accuracy in South |
-| **Features** | 79 features | 94 features (+15 new) | Better signal capture |
+| **Features** | 79 features | 101 features (+22 new) | Water balance, irrigation, insurance, land use |
 | **MAE** | 532 kg/ha | 485 kg/ha | **-13.5% error** |
 
 ### New Features Added
@@ -146,15 +146,17 @@ Brazil-Soybean-Forecast/
 │       ├── target_soja.parquet
 │       └── dataset_final.parquet
 ├── src/
-│   ├── ingest/                 # Data ingestion modules
-│   │   ├── climate_nasa.py     # NASA POWER API client
-│   │   ├── climate_update.py   # Radiation/wind downloader
-│   │   ├── ndvi_gee.py         # Google Earth Engine NDVI
-│   │   ├── soil_embrapa.py     # EMBRAPA soil data
-│   │   └── target_pam.py       # IBGE crop production
+│   ├── ingest/                 # Data ingestion (via agrobr)
+│   │   ├── pam.py              # IBGE PAM soybean yield
+│   │   ├── climate_power.py    # NASA POWER daily climate
+│   │   ├── soilgrids.py        # ISRIC SoilGrids soil properties
+│   │   ├── pivos.py            # ANA irrigation pivots
+│   │   ├── fertilizante.py     # ComexStat fertilizer imports
+│   │   ├── seguro_rural.py     # MAPA PSR crop insurance
+│   │   └── mapbiomas_soja.py   # MapBiomas soybean land use
 │   ├── validation/             # Data quality contracts
 │   ├── features/
-│   │   └── build_features.py   # Feature engineering (93 features)
+│   │   └── build_features.py   # Feature engineering (101 features)
 │   ├── modeling/
 │   │   ├── train.py            # Single model training
 │   │   └── ensemble.py         # Regional ensemble
@@ -211,7 +213,7 @@ Brazil-Soybean-Forecast/
 ```
                     ┌─────────────────┐
                     │   Input Data    │
-                    │  (93 features)  │
+                    │  (101 features)  │
                     └────────┬────────┘
                              │
               ┌──────────────┴──────────────┐
@@ -300,11 +302,14 @@ Brazil-Soybean-Forecast/
 
 ## Future Improvements
 
-- [ ] Conformal prediction for calibrated uncertainty intervals
+- [x] Conformal prediction for calibrated uncertainty intervals
+- [x] Water balance features (ETo, deficit)
+- [x] New data sources (irrigation, fertilizer, insurance, land use)
+- [x] DuckDB-accelerated feature aggregation
+- [ ] Detrended model for better extrapolation to record yields
 - [ ] Transformer models for temporal patterns
 - [ ] REST API for credit system integration
 - [ ] Real-time yield monitoring during growing season
-- [ ] County-level economic indicators integration
 
 ---
 

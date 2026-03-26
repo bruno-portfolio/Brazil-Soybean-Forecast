@@ -8,6 +8,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+from src.common.conformal import ConformalCalibrator  # noqa: F401
 from src.common.constants import REGION_SUL
 from src.common.features import (
     add_enso_features,
@@ -58,36 +59,6 @@ QUANTILE_MODELS_PATH = {
     0.90: PROJECT_ROOT / "models" / "quantile_p90.pkl",
     0.95: PROJECT_ROOT / "models" / "quantile_p95.pkl",
 }
-
-
-class ConformalCalibrator:
-    """Calibrador conformal simples para intervalos de predicao."""
-
-    def __init__(self):
-        self.conformity_scores = None
-        self.n_calib = 0
-
-    def fit(self, y_true: np.ndarray, y_pred: np.ndarray) -> "ConformalCalibrator":
-        """Calibra o predictor usando residuos absolutos."""
-        self.conformity_scores = np.abs(y_true - y_pred)
-        self.n_calib = len(y_true)
-        return self
-
-    def predict_interval(
-        self, y_pred: np.ndarray, alpha: float = 0.20
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Gera intervalos de predicao calibrados."""
-        if self.conformity_scores is None:
-            raise ValueError("Calibrador nao foi treinado.")
-
-        n = self.n_calib
-        adjusted_quantile = min(1.0, (1 - alpha) * (n + 1) / n)
-        q = np.quantile(self.conformity_scores, adjusted_quantile)
-
-        lower = y_pred - q
-        upper = y_pred + q
-
-        return lower, upper
 
 
 def load_model():

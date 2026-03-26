@@ -110,6 +110,28 @@ stages:
       - results/metrics.json:
           cache: false
 
+  train_regional:
+    cmd: python -m src.modeling.train_regional
+    deps:
+      - src/modeling/train_regional.py
+      - configs/model.yaml
+      - configs/split.yaml
+      - data/processed/dataset_final.parquet
+    outs:
+      - models/model_sul.pkl
+      - models/model_cerrado.pkl
+
+  train_conformal:
+    cmd: python -m src.modeling.train_conformal
+    deps:
+      - src/modeling/train_conformal.py
+      - models/model_sul.pkl
+      - models/model_cerrado.pkl
+      - data/processed/dataset_final.parquet
+    outs:
+      - models/conformal_sul.pkl
+      - models/conformal_cerrado.pkl
+
   evaluate:
     cmd: python -m src.evaluation.evaluate
     deps:

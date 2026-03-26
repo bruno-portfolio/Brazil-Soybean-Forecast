@@ -21,7 +21,7 @@ except ImportError:
     logger.warning("earthengine-api nao instalado. Execute: pip install earthengine-api")
 
 
-GEE_PROJECT = os.environ.get("GEE_PROJECT", "teste-483217")
+GEE_PROJECT = os.environ.get("GEE_PROJECT", "")
 
 
 def initialize_gee(project_id: str | None = None) -> bool:

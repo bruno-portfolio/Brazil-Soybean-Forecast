@@ -1,8 +1,6 @@
-# Dicionario de Dados - Dataset Final v2.0
+# Dicionario de Dados - Dataset Final
 
 Este documento descreve todas as variaveis do dataset `data/processed/dataset_final.parquet`, usado para treinamento do modelo de previsao de produtividade de soja.
-
-**Versao**: 2.0 (com Fase 1 de melhorias)
 
 ## Visao Geral
 
@@ -12,9 +10,28 @@ Este documento descreve todas as variaveis do dataset `data/processed/dataset_fi
 | Municipios unicos   | 2,763            |
 | Periodo             | 2000 - 2023      |
 | Anos                | 24               |
-| Total de features   | 38               |
+| Total de colunas    | 106              |
+| Total de features   | 101              |
 | Granularidade       | Municipio x Ano  |
 | Chave primaria      | (cod_ibge, ano)  |
+
+## Grupos de Features
+
+| Grupo | Count | Exemplos |
+|-------|-------|----------|
+| Clima agregado | 6 | precip_total_mm, tmean_avg, hot_days_count |
+| Clima por fase (plantio/vegetativo/enchimento) | 18 | precip_plantio_mm, tmean_vegetativo |
+| Seca | 5 | dry_spell_max, precip_cv |
+| Water balance | 13 | eto_total_mm, water_deficit_mm, deficit_enchimento_mm |
+| ENSO | 6 | oni_avg, is_la_nina |
+| Historico | 3 | produtividade_lag1, produtividade_ma3, trend |
+| Anomalias | 6 | precip_anomaly, temp_anomaly |
+| Interacoes ENSO | 8 | la_nina_x_deficit, terminal_drought_stress |
+| Regional | 4 | is_sul, sul_x_la_nina |
+| Solo | 16 | clay_0_30cm, awc_estimated, soil_quality_index |
+| Interacoes solo | 9 | clay_x_precip_deficit, awc_x_deficit |
+| Fontes novas | 4 | pct_irrigado, fert_import_ton, sinistro_rate_3yr, pct_soja |
+| Interacoes fontes novas | 3 | irrigacao_x_deficit, fert_x_precip, sinistro_x_la_nina |
 
 ## Variaveis
 

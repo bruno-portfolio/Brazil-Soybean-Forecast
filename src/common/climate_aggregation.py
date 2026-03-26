@@ -1,6 +1,6 @@
 """Agregacao climatica vetorizada com DuckDB.
 
-Substitui o loop Python sobre cod_ibge x crop_year por queries SQL.
+Agrega dados diarios em features por safra (cod_ibge x crop_year) via SQL.
 Inclui: features por fase, totais, dry spell, variabilidade, water balance (ETo + deficit).
 """
 

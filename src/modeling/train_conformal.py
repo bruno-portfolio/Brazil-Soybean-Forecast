@@ -55,35 +55,7 @@ def prepare_data(
     return X, y, df_clean
 
 
-class ConformalCalibrator:
-    """Calibrador conformal simples para intervalos de predicao."""
-
-    def __init__(self):
-        self.conformity_scores = None
-        self.n_calib = 0
-
-    def fit(self, y_true: np.ndarray, y_pred: np.ndarray) -> ConformalCalibrator:
-        """Calibra o predictor usando residuos absolutos."""
-        self.conformity_scores = np.abs(y_true - y_pred)
-        self.n_calib = len(y_true)
-        return self
-
-    def predict_interval(
-        self, y_pred: np.ndarray, alpha: float = 0.20
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Gera intervalos de predicao calibrados."""
-        if self.conformity_scores is None:
-            raise ValueError("Calibrador nao foi treinado. Execute fit() primeiro.")
-
-        n = self.n_calib
-        adjusted_quantile = min(1.0, (1 - alpha) * (n + 1) / n)
-
-        q = np.quantile(self.conformity_scores, adjusted_quantile)
-
-        lower = y_pred - q
-        upper = y_pred + q
-
-        return lower, upper
+from src.common.conformal import ConformalCalibrator  # noqa: F401
 
 
 def calculate_coverage(y_true: np.ndarray, y_lower: np.ndarray, y_upper: np.ndarray) -> float:

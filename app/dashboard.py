@@ -5,17 +5,18 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import json
+
 import pandas as pd
 
 try:
+    import joblib
+    import matplotlib.pyplot as plt
     import plotly.express as px
     import plotly.graph_objects as go
+    import shap
     import streamlit as st
     from plotly.subplots import make_subplots
 
-    import joblib
-    import shap
-    import matplotlib.pyplot as plt
     from src.modeling.train_conformal import ConformalCalibrator
 
     STREAMLIT_AVAILABLE = True
@@ -35,7 +36,7 @@ EVALUATION_PATH = PROJECT_ROOT / "results" / "evaluation_report.md"
 
 def ano_para_safra(ano: int) -> str:
     """Converte ano PAM para nomenclatura de safra."""
-    return f"{ano-1}/{str(ano)[2:]}"
+    return f"{ano - 1}/{str(ano)[2:]}"
 
 
 def safra_para_ano(safra: str) -> int:
@@ -91,23 +92,23 @@ def render_model_info_sidebar():
     if training:
         st.sidebar.markdown(
             f"""
-        **Versao:** v3.0 (Fase 2)
+        **Versao:** v2.0
 
         **Dados de Treino:**
         - Safras 1999/00 a 2017/18
-        - {training.get('train_metrics', {}).get('n_samples', 'N/A')} amostras
+        - {training.get("train_metrics", {}).get("n_samples", "N/A")} amostras
 
         **Validacao (2018/19 a 2020/21):**
-        - MAE: {training.get('val_metrics', {}).get('mae_kg_ha', 0):.0f} kg/ha
+        - MAE: {training.get("val_metrics", {}).get("mae_kg_ha", 0):.0f} kg/ha
 
         **Teste (2021/22 a 2022/23):**
-        - MAE: {training.get('test_metrics', {}).get('mae_kg_ha', 0):.0f} kg/ha
+        - MAE: {training.get("test_metrics", {}).get("mae_kg_ha", 0):.0f} kg/ha
         """
         )
     else:
         st.sidebar.markdown(
             """
-        **Versao:** v3.0 (Fase 2)
+        **Versao:** v2.0
 
         **Dados de Treino:**
         - Safras 1999/00 a 2017/18
@@ -177,7 +178,7 @@ def page_visao_geral():
         st.metric(
             "Produtividade Media Prevista",
             f"{media_prod:.0f} kg/ha",
-            f"{media_prod/60:.1f} sc/ha",
+            f"{media_prod / 60:.1f} sc/ha",
         )
 
     with col3:
@@ -326,7 +327,9 @@ def page_validacao():
 
         with col1:
             mae = test_metrics.get("mae_kg_ha", 551)
-            st.metric("MAE", f"{mae:.0f} kg/ha", f"{mae/60:.1f} sc/ha", help="Erro Medio Absoluto")
+            st.metric(
+                "MAE", f"{mae:.0f} kg/ha", f"{mae / 60:.1f} sc/ha", help="Erro Medio Absoluto"
+            )
 
         with col2:
             mape = test_metrics.get("mape_percent", 37.6)
@@ -501,13 +504,13 @@ def page_municipio():
         """
         )
         st.markdown(
-            f"| Pessimista (p10) | {row.get('pred_p10_kg_ha', 0):.0f} kg/ha | {row.get('pred_p10_kg_ha', 0)/60:.1f} |"
+            f"| Pessimista (p10) | {row.get('pred_p10_kg_ha', 0):.0f} kg/ha | {row.get('pred_p10_kg_ha', 0) / 60:.1f} |"
         )
         st.markdown(
-            f"| **Base (p50)** | **{row.get('pred_p50_kg_ha', row['pred_produtividade_kg_ha']):.0f} kg/ha** | **{row.get('pred_p50_kg_ha', row['pred_produtividade_kg_ha'])/60:.1f}** |"
+            f"| **Base (p50)** | **{row.get('pred_p50_kg_ha', row['pred_produtividade_kg_ha']):.0f} kg/ha** | **{row.get('pred_p50_kg_ha', row['pred_produtividade_kg_ha']) / 60:.1f}** |"
         )
         st.markdown(
-            f"| Otimista (p90) | {row.get('pred_p90_kg_ha', 0):.0f} kg/ha | {row.get('pred_p90_kg_ha', 0)/60:.1f} |"
+            f"| Otimista (p90) | {row.get('pred_p90_kg_ha', 0):.0f} kg/ha | {row.get('pred_p90_kg_ha', 0) / 60:.1f} |"
         )
 
     with col2:
@@ -524,10 +527,10 @@ def page_municipio():
             }
 
             st.markdown(
-                f"""<div style='background-color: {rating_colors.get(rating, 'gray')};
+                f"""<div style='background-color: {rating_colors.get(rating, "gray")};
                 padding: 20px; border-radius: 10px; text-align: center;'>
                 <h1 style='color: white; margin: 0;'>{rating}</h1>
-                <p style='color: white; margin: 0;'>{rating_labels.get(rating, '')}</p>
+                <p style='color: white; margin: 0;'>{rating_labels.get(rating, "")}</p>
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -536,7 +539,7 @@ def page_municipio():
 
             col_a, col_b = st.columns(2)
             with col_a:
-                st.metric("Prob. Quebra", f"{risk_row['prob_quebra']*100:.1f}%")
+                st.metric("Prob. Quebra", f"{risk_row['prob_quebra'] * 100:.1f}%")
                 st.metric("Custo Producao", f"R$ {risk_row['custo_ha']:,.0f}/ha")
             with col_b:
                 st.metric("Spread Sugerido", f"{risk_row['spread_sugerido']}% a.a.")
@@ -547,9 +550,9 @@ def page_municipio():
                 f"""
             | Cenario | Receita/ha | Lucro/ha |
             |---------|------------|----------|
-            | Pessimista | R$ {risk_row['receita_pessimista']:,.0f} | R$ {risk_row['lucro_pessimista']:,.0f} |
-            | Base | R$ {risk_row['receita_base']:,.0f} | R$ {risk_row['lucro_base']:,.0f} |
-            | Otimista | R$ {risk_row['receita_otimista']:,.0f} | R$ {risk_row['lucro_otimista']:,.0f} |
+            | Pessimista | R$ {risk_row["receita_pessimista"]:,.0f} | R$ {risk_row["lucro_pessimista"]:,.0f} |
+            | Base | R$ {risk_row["receita_base"]:,.0f} | R$ {risk_row["lucro_base"]:,.0f} |
+            | Otimista | R$ {risk_row["receita_otimista"]:,.0f} | R$ {risk_row["lucro_otimista"]:,.0f} |
             """
             )
 
@@ -575,14 +578,17 @@ def page_municipio():
                 ano_busca = int(ano)
 
                 X_municipio_clima = df_features[
-                    (df_features["cod_ibge"] == cod_ibge_busca) &
-                    (df_features["ano"] == ano_busca)
+                    (df_features["cod_ibge"] == cod_ibge_busca) & (df_features["ano"] == ano_busca)
                 ]
 
                 if len(X_municipio_clima) == 0:
                     anos_disponiveis = df_features["ano"].unique()
-                    st.error(f"Erro no filtro! Procuramos: IBGE {cod_ibge_busca} e Ano {ano_busca}.")
-                    st.info(f"O arquivo 'dataset_final.parquet' contém apenas os anos: {sorted(anos_disponiveis)}")
+                    st.error(
+                        f"Erro no filtro! Procuramos: IBGE {cod_ibge_busca} e Ano {ano_busca}."
+                    )
+                    st.info(
+                        f"O arquivo 'dataset_final.parquet' contém apenas os anos: {sorted(anos_disponiveis)}"
+                    )
                 else:
                     X_municipio_final = X_municipio_clima[features_treino]
 
