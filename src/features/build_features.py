@@ -411,6 +411,7 @@ def main():
 
     new_source_cols = [
         "pct_irrigado",
+        "fert_import_ton",
         "fert_total_br_ton",
         "sinistro_rate_3yr",
         "pct_soja",
