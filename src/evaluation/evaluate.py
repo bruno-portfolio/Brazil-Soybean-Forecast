@@ -162,8 +162,8 @@ def create_error_by_year_plot(
     ax.set_title("Erro (MAE) por Ano", fontsize=14)
     ax.grid(True, axis="y", alpha=0.3)
 
-    ax.axvline(x=2018.5, color="red", linestyle="--", label="Fim do treino")
-    ax.axvline(x=2021.5, color="orange", linestyle="--", label="Fim da validacao")
+    ax.axvline(x=2021.5, color="red", linestyle="--", label="Fim do treino")
+    ax.axvline(x=2022.5, color="orange", linestyle="--", label="Fim da validacao")
     ax.legend()
 
     plt.tight_layout()
@@ -376,7 +376,7 @@ def run_full_evaluation(model_version: str = "v2") -> dict[str, Any]:
 
     create_scatter_plot(
         test_with_pred,
-        title="Predicted vs Actual (Teste 2022-2023)",
+        title="Predicted vs Actual (Teste 2023)",
         output_path=RESULTS_PATH / "scatter_test.png",
     )
 

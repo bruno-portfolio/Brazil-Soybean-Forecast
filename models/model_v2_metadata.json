@@ -1,5 +1,7 @@
 {
-  "model_path": "C:\\Dev - Projetos\\Machine Learning\\Brazil-Soybean-Forecast\\models\\model_v2.pkl",
+  "version": "v2",
+  "algorithm": "lightgbm",
+  "training_date": "2026-03-26T12:40:23.907123",
   "feature_names": [
     "precip_total_mm",
     "tmean_avg",
@@ -102,6 +104,7 @@
     "fert_x_precip",
     "sinistro_x_la_nina"
   ],
+  "best_iteration": 345,
   "train_metrics": {
     "mae_kg_ha": 240.1,
     "mae_sacas_ha": 4.0,
@@ -126,7 +129,6 @@
     "mape_percent": 17.66,
     "n_samples": 2603
   },
-  "best_iteration": 345,
   "feature_importance": {
     "produtividade_lag1": 34826088173.0,
     "produtividade_ma3": 25066818169.0,

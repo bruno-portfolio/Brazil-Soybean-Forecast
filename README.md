@@ -3,107 +3,55 @@
 ![CI](https://github.com/bruno-portfolio/Brazil-Soybean-Forecast/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Model MAE](https://img.shields.io/badge/MAE-411_kg%2Fha-brightgreen)
-![Features](https://img.shields.io/badge/Features-101-orange)
-![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white)
-![LightGBM](https://img.shields.io/badge/LightGBM-Ensemble-9cf)
-![XGBoost](https://img.shields.io/badge/XGBoost-Ensemble-blue)
+![Model MAE](https://img.shields.io/badge/MAE-410_kg%2Fha-brightgreen)
+![Features](https://img.shields.io/badge/Features-100-orange)
+![LightGBM](https://img.shields.io/badge/LightGBM-Regional-9cf)
 
 ## TL;DR
 
 **Problem:** Agricultural cooperatives and credit banks need accurate municipality-level soybean yield estimates for crop insurance pricing, credit limits, and early warning of problematic harvests — but currently rely on subjective estimates or historical averages that ignore climate and regional variations.
 
-**Solution:** End-to-end ML pipeline combining public data (IBGE, NASA POWER, MODIS NDVI) to predict yield in kg/ha with **MAE of 485 kg/ha (~8 bags/ha)**, calibrated confidence intervals, and automatic translation to credit risk language.
+**Solution:** End-to-end ML pipeline combining 9 public data sources (IBGE, NASA POWER, SoilGrids, ENSO, MapBiomas, and more) to predict yield in kg/ha with **MAE of 410 kg/ha (~6.8 bags/ha)**, calibrated confidence intervals via conformal prediction, and automatic translation to credit risk language.
 
 **Key Features:**
-- Regional models (South vs Cerrado) — 16% more accurate in South where La Niña causes more damage
-- Ensemble of LightGBM + XGBoost with weighted averaging
-- 94 engineered features including ETo, water deficit, NDVI, and climate interactions
-- Interactive Streamlit dashboard for municipality analysis
-
-<img width="1435" height="877" alt="image" src="https://github.com/user-attachments/assets/68f84fb4-44ca-443a-aa97-038fe364b8e1" />
-<img width="1123" height="454" alt="image" src="https://github.com/user-attachments/assets/942a82f9-991b-409a-acf3-568c6d38df95" />
-<img width="1459" height="756" alt="image" src="https://github.com/user-attachments/assets/ad62e1c8-66d3-4dfa-9731-b5cd010be8c1" />
-<img width="1452" height="844" alt="image" src="https://github.com/user-attachments/assets/833322c5-6e26-4a1b-83ca-963e4f86cfcd" />
-<img width="1422" height="868" alt="image" src="https://github.com/user-attachments/assets/c49461be-0ac9-4f7b-999d-ad69a7c67f7c" />
-
-## What's New in v2.0
-
-### Model Improvements
-| Change | Before | After | Impact |
-|--------|--------|-------|--------|
-| **Architecture** | Single LightGBM | Ensemble (LightGBM + XGBoost) | More robust predictions |
-| **Regional Split** | One model for all | South vs Cerrado specialized | +16% accuracy in South |
-| **Features** | 79 features | 101 features (+22 new) | Water balance, irrigation, insurance, land use |
-| **MAE** | 532 kg/ha | 485 kg/ha | **-13.5% error** |
-
-### New Features Added
-- **Evapotranspiration (ETo)**: Hargreaves-Samani method using temperature data
-- **Water Deficit by Phase**: `deficit_plantio`, `deficit_vegetativo`, `deficit_enchimento`
-- **Climate Interactions**: `la_nina_x_deficit`, `terminal_drought_stress`, `awc_x_deficit`, `sand_x_deficit`
-
-### New Data Sources
-- **NASA POWER Radiation**: Solar radiation (ALLSKY_SFC_SW_DWN) for 2,763 municipalities
-- **NASA POWER Wind**: Wind speed (WS2M) for Penman-Monteith ETo
-- **MODIS NDVI**: Vegetation index via Google Earth Engine for 819 municipalities (30% coverage)
-
-### NDVI Integration (Google Earth Engine)
-Successfully integrated MODIS MOD13Q1 NDVI data:
-- 819 municipalities with NDVI features
-- 26 years of data (2000-2025)
-- Features: `ndvi_mean_safra`, `ndvi_max_safra`, `ndvi_amplitude`, `ndvi_plantio`, `ndvi_vegetativo`, `ndvi_enchimento`
-- Impact with 30% coverage: minimal (+0.04% MAE reduction)
-- Full coverage would likely improve results by 2-5%
-
-### Infrastructure
-- **CI/CD**: GitHub Actions pipeline with linting, tests, and build checks
-- **Pipeline Script**: `run_improvements.py` for easy reproduction
-- **Caching**: Incremental data downloads with resume capability
+- Regional LightGBM models (South vs Cerrado) with specialized regularization
+- 100 engineered features: water balance, soil interactions, ENSO teleconnections, phenological phases
+- Conformal prediction intervals (95.6% coverage in South, 92.3% in Cerrado at 90% nominal)
+- DVC-orchestrated pipeline with 12 reproducible stages
 
 ---
 
 ## Results
 
-![Model Performance](results/model_performance.png)
-
 ### Model Performance vs Baseline
 
-| Model | MAE (kg/ha) | MAE (bags/ha) | vs Baseline |
-|-------|-------------|---------------|-------------|
-| 3-Year Moving Average (MA3) | 560.1 | 9.3 | baseline |
-| **Regional Ensemble** | **484.8** | **8.1** | **-13.5%** |
+| Model | MAE (kg/ha) | MAE (sacas/ha) | vs Baseline |
+|-------|-------------|----------------|-------------|
+| 3-Year Moving Average (MA3) | 439 | 7.3 | baseline |
+| LightGBM (Global) | 417 | 6.9 | -5.0% |
+| **Regional LightGBM** | **410** | **6.8** | **-6.6%** |
 
 ### Performance by Region
 
-| Region | Baseline MAE | Ensemble MAE | Improvement |
-|--------|--------------|--------------|-------------|
-| **South** (RS, PR, SC) | 856.7 kg/ha | 718.2 kg/ha | **16.2%** |
-| **Cerrado** (MT, GO, MS, etc.) | 358.8 kg/ha | 326.4 kg/ha | **8.8%** |
-| **Combined** | 560.1 kg/ha | 484.8 kg/ha | **13.5%** |
+| Region | Baseline MAE | Model MAE | Improvement |
+|--------|--------------|-----------|-------------|
+| **South** (RS, PR, SC) | 587 kg/ha | 561 kg/ha | **-4.4%** |
+| **Cerrado** (MT, GO, MS, etc.) | 330 kg/ha | 299 kg/ha | **-9.5%** |
+| **Combined** | 439 kg/ha | 410 kg/ha | **-6.6%** |
 
-*Test set: 5,125 municipality-year observations (2022-2023 harvest seasons)*
-
-**Why is South MAE higher?**
-The 2022 test period coincides with a severe La Niña event that caused historic yield losses in Rio Grande do Sul. The regional model with higher regularization still outperforms the baseline by 16%.
+*Test set: 2,303 municipality-year observations (2023 harvest season)*
 
 ### Feature Importance
 
-![Feature Importance](results/feature_importance.png)
+Top drivers: historical yield momentum (lag1, MA3, trend) accounts for ~50% of model gain. Water deficit at grain fill (`deficit_ratio_enchimento`) is the strongest climate signal at 6%, followed by solar radiation and precipitation variability.
 
 ---
 
 ## Quick Start
 
-pip install -r requirements.txt
-pip install pyyaml  # if yaml error
-
-**Note:** Large climate files (`climate_daily.parquet`, ~550MB) are not included in the repo.
-
-**Run** `python run_improvements.py --climate` to generate them, or use the pre-processed `dataset_final.parquet` for quick testing.
-
 ### Option 1: Quick Run (uses existing processed data)
 ```bash
-git clone https://github.com/yourusername/Brazil-Soybean-Forecast.git
+git clone https://github.com/bruno-portfolio/Brazil-Soybean-Forecast.git
 cd Brazil-Soybean-Forecast
 
 python -m venv venv
@@ -111,18 +59,22 @@ venv\Scripts\activate  # Windows
 # source venv/bin/activate  # Linux/Mac
 
 pip install -r requirements.txt
-
-python run_improvements.py --quick
 ```
 
-### Option 2: Full Pipeline (downloads fresh data)
+The pre-processed `dataset_final.parquet` is included for quick testing.
+
+### Option 2: Full Pipeline (DVC)
 ```bash
-# Download additional climate data (radiation, wind speed)
-python run_improvements.py --climate
+# Run full pipeline: ingest -> features -> train -> evaluate
+dvc repro
 
-# Rebuild features and train ensemble
-python run_improvements.py --features --train --evaluate
+# Or run specific stages
+dvc repro build_features
+dvc repro train
+dvc repro evaluate
 ```
+
+**Note:** Large climate files (`climate_daily.parquet`, ~550MB) are not included in the repo. Run `dvc repro ingest_climate` to download from NASA POWER.
 
 ### Run Dashboard
 ```bash
@@ -135,125 +87,172 @@ streamlit run app/dashboard.py
 
 ```
 Brazil-Soybean-Forecast/
+├── dvc.yaml                       # Pipeline (12 stages)
+├── configs/
+│   ├── model.yaml                 # LightGBM hyperparameters
+│   ├── split.yaml                 # Temporal train/val/test split
+│   ├── features.yaml              # Feature engineering config
+│   └── ...                        # climate, soil, target, geo, ndvi
 ├── data/
-│   ├── raw/                    # Raw data from APIs (cached)
-│   │   ├── climate/            # NASA POWER daily climate
-│   │   ├── climate_extra/      # Radiation & wind (optional)
-│   │   └── ndvi_gee/           # MODIS NDVI (optional)
-│   └── processed/              # Feature-engineered datasets
-│       ├── climate_daily.parquet
-│       ├── soil_municipalities.parquet
+│   ├── raw/                       # Raw API downloads (cached)
+│   └── processed/                 # Feature-engineered datasets
+│       ├── dataset_final.parquet  # Main dataset (48K rows, 106 cols)
+│       ├── climate_daily.parquet  # NASA POWER daily climate
+│       ├── soil_properties.parquet
 │       ├── target_soja.parquet
-│       └── dataset_final.parquet
+│       ├── fertilizante_uf.parquet
+│       ├── pivos_irrigacao.parquet
+│       ├── seguro_rural.parquet
+│       └── mapbiomas_soja.parquet
 ├── src/
-│   ├── ingest/                 # Data ingestion (via agrobr)
-│   │   ├── pam.py              # IBGE PAM soybean yield
-│   │   ├── climate_power.py    # NASA POWER daily climate
-│   │   ├── soilgrids.py        # ISRIC SoilGrids soil properties
-│   │   ├── pivos.py            # ANA irrigation pivots
-│   │   ├── fertilizante.py     # ComexStat fertilizer imports
-│   │   ├── seguro_rural.py     # MAPA PSR crop insurance
-│   │   └── mapbiomas_soja.py   # MapBiomas soybean land use
-│   ├── validation/             # Data quality contracts
+│   ├── ingest/                    # Data ingestion (9 sources)
+│   │   ├── pam.py                 # IBGE PAM soybean yield
+│   │   ├── climate_power.py       # NASA POWER daily climate
+│   │   ├── soilgrids.py           # ISRIC SoilGrids soil properties
+│   │   ├── pivos.py               # ANA irrigation pivots
+│   │   ├── fertilizante.py        # ComexStat fertilizer imports
+│   │   ├── seguro_rural.py        # MAPA PSR crop insurance
+│   │   ├── mapbiomas_soja.py      # MapBiomas soybean land use
+│   │   ├── ndvi_gee.py            # MODIS NDVI via Google Earth Engine
+│   │   └── enso.py                # NOAA ONI climate indices
 │   ├── features/
-│   │   └── build_features.py   # Feature engineering (101 features)
+│   │   └── build_features.py      # Feature engineering (100 features)
+│   ├── common/                    # Shared utilities
+│   │   ├── water_balance.py       # ETo (Hargreaves/Penman-Monteith)
+│   │   ├── phenology.py           # Regional phenological calendars
+│   │   ├── conformal.py           # Conformal prediction calibrator
+│   │   ├── climate_aggregation.py # DuckDB-accelerated aggregation
+│   │   └── new_source_features.py # Irrigation, fertilizer, insurance
 │   ├── modeling/
-│   │   ├── train.py            # Single model training
-│   │   └── ensemble.py         # Regional ensemble
-│   ├── evaluation/             # Metrics and analysis
-│   ├── inference/              # Prediction pipeline
-│   ├── monitoring/             # Drift detection
-│   └── business/               # Risk translation
-├── models/                     # Trained model artifacts
-│   └── ensemble_regional/      # LightGBM + XGBoost by region
-├── results/                    # Evaluation outputs
+│   │   ├── train.py               # Global LightGBM training
+│   │   ├── train_regional.py      # South + Cerrado models
+│   │   ├── train_conformal.py     # Conformal prediction intervals
+│   │   └── split.py               # Temporal split (no leakage)
+│   ├── evaluation/                # Metrics, SHAP explainability
+│   ├── inference/                 # Forecast generation
+│   ├── monitoring/                # Drift detection
+│   └── business/                  # Credit risk translation
+├── models/                        # Trained model artifacts
+│   ├── model_v2.pkl               # Global LightGBM
+│   ├── model_sul.pkl              # South regional model
+│   ├── model_cerrado.pkl          # Cerrado regional model
+│   ├── conformal_sul.pkl          # Conformal calibrator (South)
+│   └── conformal_cerrado.pkl      # Conformal calibrator (Cerrado)
+├── results/                       # Evaluation outputs & plots
 ├── app/
-│   └── dashboard.py            # Streamlit dashboard
-├── configs/                    # YAML configurations
-├── run_improvements.py         # Main pipeline script
-└── requirements.txt
+│   └── dashboard.py               # Streamlit dashboard
+└── tests/                         # Unit tests
 ```
 
 ---
 
-## Features (93 total)
+## Features (100 total)
 
 ### Climate Features (by phenological phase)
 | Category | Count | Examples |
 |----------|-------|----------|
-| Temperature | 12 | `temp_mean_plantio`, `temp_range_vegetativo`, `hot_days_enchimento` |
-| Precipitation | 15 | `precip_total_safra`, `dry_spell_max`, `consecutive_dry_days` |
-| Evapotranspiration | 6 | `eto_hargreaves`, `eto_vegetativo`, `eto_enchimento` |
-| Water Balance | 9 | `deficit_plantio`, `deficit_vegetativo`, `deficit_enchimento` |
+| Temperature | 12 | `tmean_plantio`, `tmax_vegetativo`, `hot_days_enchimento` |
+| Precipitation | 11 | `precip_total_mm`, `dry_spell_max`, `precip_cv` |
+| Evapotranspiration | 7 | `eto_total_mm`, `eto_plantio_mm`, `eto_enchimento_mm` |
+| Water Deficit | 6 | `deficit_plantio_mm`, `deficit_ratio_enchimento`, `water_deficit_ratio` |
+| Radiation | 2 | `radiation_total`, `radiation_mean` |
+| GDD | 5 | `gdd_accumulated`, `gdd_plantio`, `gdd_vegetativo` |
 
-### Soil Features
+### Soil Features (16)
 | Feature | Description |
 |---------|-------------|
-| `sand_content`, `clay_content` | Texture composition |
-| `ph_water` | Soil acidity |
-| `organic_carbon` | Organic matter content |
-| `awc` | Available Water Capacity |
-| `cec` | Cation Exchange Capacity |
+| `clay_0_30cm`, `sand_0_30cm`, `silt_0_30cm` | Texture composition (0-30cm and 30-100cm) |
+| `phh2o_0_30cm` | Soil acidity |
+| `soc_0_30cm`, `nitrogen_0_30cm` | Organic matter |
+| `awc_estimated` | Available Water Capacity |
+| `cec_0_30cm` | Cation Exchange Capacity |
+| `soil_quality_index` | Composite soil quality |
 
-### Temporal & Interaction Features
+### ENSO & Climate Indices (6)
+| Feature | Description |
+|---------|-------------|
+| `oni_avg`, `oni_std` | Oceanic Nino Index (mean, variability) |
+| `is_la_nina`, `is_el_nino` | Binary ENSO flags |
+
+### Historical & Temporal (3)
 | Feature | Description |
 |---------|-------------|
 | `produtividade_lag1` | Previous year yield |
 | `produtividade_ma3` | 3-year moving average |
-| `la_nina_x_deficit` | La Niña impact on water stress |
-| `terminal_drought_stress` | Late-season drought indicator |
-| `awc_x_deficit` | Soil buffer during drought |
+| `trend` | Temporal trend (technological progress) |
+
+### New Data Sources (4)
+| Feature | Source | Description |
+|---------|--------|-------------|
+| `pct_irrigado` | ANA | % irrigated area |
+| `fert_import_ton` | ComexStat | Fertilizer imports by state |
+| `sinistro_rate_3yr` | MAPA PSR | 3-year insurance loss rate |
+| `pct_soja` | MapBiomas | Soybean land use fraction |
+
+### Interactions & Anomalies (19)
+Climate anomalies, ENSO interactions (`la_nina_x_deficit`, `terminal_drought_stress`), soil-climate interactions (`awc_x_deficit`, `sand_x_drought`), regional interactions (`sul_x_la_nina`), and source interactions (`irrigacao_x_deficit`, `fert_x_precip`).
 
 ---
 
 ## Model Details
 
-### Regional Ensemble Architecture
+### Regional LightGBM Architecture
 
 ```
-                    ┌─────────────────┐
-                    │   Input Data    │
-                    │  (101 features)  │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              │                             │
-              ▼                             ▼
-    ┌─────────────────┐           ┌─────────────────┐
-    │   South Model   │           │  Cerrado Model  │
-    │  (PR, SC, RS)   │           │ (MT, GO, MS...) │
-    │                 │           │                 │
-    │ LightGBM (53%)  │           │ LightGBM (53%)  │
-    │ XGBoost  (47%)  │           │ XGBoost  (47%)  │
-    │                 │           │                 │
-    │ Higher L2 reg   │           │ Standard params │
-    │ Fewer leaves    │           │                 │
-    └────────┬────────┘           └────────┬────────┘
-             │                             │
-             └──────────────┬──────────────┘
-                            ▼
-                   ┌─────────────────┐
-                   │   Predictions   │
-                   │    (kg/ha)      │
-                   └─────────────────┘
+                    +------------------+
+                    |   Input Data     |
+                    |  (100 features)  |
+                    +--------+---------+
+                             |
+              +--------------+--------------+
+              |                             |
+              v                             v
+    +------------------+          +------------------+
+    |   South Model    |          |  Cerrado Model   |
+    |  (PR, SC, RS)    |          | (MT, GO, MS...)  |
+    |                  |          |                  |
+    |   LightGBM       |          |   LightGBM       |
+    |                  |          |                  |
+    |  Higher L2 reg   |          |  Standard params |
+    |  min_leaf = 10   |          |  min_leaf = 20   |
+    +--------+---------+          +--------+---------+
+             |                             |
+             +-------------+---------------+
+                           v
+                  +------------------+
+                  |   Predictions    |
+                  |    (kg/ha)       |
+                  +------------------+
+                           |
+                           v
+                  +------------------+
+                  |    Conformal     |
+                  |   Calibration    |
+                  | (80%/90% bands)  |
+                  +------------------+
 ```
 
 ### Why Regional Models?
 
-1. **Climate Variability**: South Brazil experiences higher inter-annual variability due to La Niña/El Niño effects
+1. **Climate Variability**: South Brazil has higher inter-annual variability due to La Nina/El Nino
 2. **Different Yield Distributions**: Cerrado has higher, more stable yields; South has wider range
-3. **Specialized Regularization**: South model uses stronger regularization to handle outliers from extreme events
+3. **Specialized Regularization**: South model uses stronger regularization to handle extreme event outliers
 
 ---
 
 ## Data Sources
 
-| Source | Data | Granularity | Auth Required |
-|--------|------|-------------|---------------|
-| [IBGE/SIDRA](https://sidra.ibge.gov.br/) | Soybean production | Municipality × Year | No |
-| [NASA POWER](https://power.larc.nasa.gov/) | Daily climate | Point × Day | No |
-| [EMBRAPA HYBRAS](https://www.embrapa.br/) | Soil properties | Municipality | No |
-| [NOAA ONI](https://www.cpc.ncep.noaa.gov/) | El Niño/La Niña index | Monthly | No |
+| Source | Data | Granularity | Auth |
+|--------|------|-------------|------|
+| [IBGE/SIDRA](https://sidra.ibge.gov.br/) | Soybean yield & area | Municipality x Year | No |
+| [NASA POWER](https://power.larc.nasa.gov/) | Daily climate (temp, precip, radiation, wind) | Point x Day | No |
+| [ISRIC SoilGrids](https://soilgrids.org/) | Soil properties (300+ attributes) | 250m raster | No |
+| [NOAA ONI](https://www.cpc.ncep.noaa.gov/) | El Nino/La Nina index | Monthly | No |
+| [ANA](https://dadosabertos.ana.gov.br/) | Irrigation pivot locations | Point | No |
+| [ComexStat](http://comexstat.mdic.gov.br/) | Fertilizer imports by state | State x Month | No |
+| [MAPA PSR](https://www.gov.br/agricultura/) | Crop insurance claims | Municipality x Year | No |
+| [MapBiomas](https://mapbiomas.org/) | Soybean land use extent | 30m raster | No |
+| [MODIS/GEE](https://earthengine.google.com/) | NDVI vegetation index | Pixel x 16-day | GEE account |
 
 ---
 
@@ -261,11 +260,11 @@ Brazil-Soybean-Forecast/
 
 | Set | Years | Samples | Purpose |
 |-----|-------|---------|---------|
-| **Train** | 2000-2018 | 35,790 | Model training |
-| **Validation** | 2019-2021 | 7,229 | Early stopping, hyperparameter tuning |
-| **Test** | 2022-2023 | 5,125 | Final evaluation |
+| **Train** | 2000-2021 | 43,019 | Model training |
+| **Validation** | 2022 | 2,525 | Early stopping (La Nina stress test) |
+| **Test** | 2023 | 2,603 | Final evaluation |
 
-*Temporal split prevents data leakage — no future information in training*
+*Strictly temporal split — no future information leaks into training*
 
 ---
 
@@ -277,39 +276,24 @@ Brazil-Soybean-Forecast/
 
 3. **Technological Drift**: New cultivars, farming practices, and area expansion cause drift not captured by the model. Annual retraining recommended
 
-4. **2022 La Niña**: Test set includes extreme La Niña year, which violates i.i.d. assumptions and affects South region performance
+4. **2022 La Nina**: Validation set (2022) includes extreme La Nina year with historic yield losses in RS. Model uses this as calibration, not as final evaluation
 
 ---
 
 ## Changelog
 
 ### v2.0 (Current)
-- Ensemble model (LightGBM + XGBoost) replacing single LightGBM
-- Regional model specialization (South vs Cerrado)
-- 14 new features (ETo, water deficit, climate interactions)
-- NASA POWER radiation and wind data integration
-- NDVI via Google Earth Engine
-- CI/CD pipeline with GitHub Actions
-- 13.5% MAE improvement over baseline
+- Regional LightGBM models (South vs Cerrado) replacing single global model
+- 100 features (up from 76): water balance, soil interactions, new data sources
+- 5 new data sources: SoilGrids, ANA pivots, ComexStat, MAPA PSR, MapBiomas
+- Conformal prediction for calibrated uncertainty intervals
+- DVC pipeline with 12 reproducible stages
+- CI/CD with GitHub Actions (lint, test, build)
 
 ### v1.0
-- Initial release with single LightGBM model
-- 79 features from climate, soil, and historical data
-- Conformal prediction intervals
+- Single LightGBM model (76 features)
+- Climate + ENSO + historical features
 - Streamlit dashboard
-
----
-
-## Future Improvements
-
-- [x] Conformal prediction for calibrated uncertainty intervals
-- [x] Water balance features (ETo, deficit)
-- [x] New data sources (irrigation, fertilizer, insurance, land use)
-- [x] DuckDB-accelerated feature aggregation
-- [ ] Detrended model for better extrapolation to record yields
-- [ ] Transformer models for temporal patterns
-- [ ] REST API for credit system integration
-- [ ] Real-time yield monitoring during growing season
 
 ---
 
@@ -320,18 +304,25 @@ Brazil-Soybean-Forecast/
 - 4GB RAM minimum
 - ~2GB disk space for data
 
-### Dependencies
+### Core Dependencies
 ```
 pandas>=2.0.0
 numpy>=1.24.0
 lightgbm>=4.0.0
-xgboost>=2.0.0
 scikit-learn>=1.3.0
-streamlit>=1.28.0
-plotly>=5.18.0
+duckdb>=1.0.0
+pyarrow>=14.0.0
 pyyaml>=6.0
 requests>=2.31.0
-pyarrow>=14.0.0
+dvc>=3.30.0
+```
+
+### Optional (dashboard & explainability)
+```
+streamlit>=1.28.0
+plotly>=5.18.0
+shap>=0.44.0
+matplotlib>=3.7.0
 ```
 
 ---
