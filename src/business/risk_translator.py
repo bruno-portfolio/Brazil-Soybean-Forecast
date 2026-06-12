@@ -28,9 +28,9 @@ class AnaliseRisco:
     uf: str
     ano: int
 
-    pred_p10_kg_ha: float
-    pred_p50_kg_ha: float
-    pred_p90_kg_ha: float
+    pred_lower_80_kg_ha: float
+    pred_kg_ha: float
+    pred_upper_80_kg_ha: float
 
     cenario_pessimista: CenarioFinanceiro
     cenario_base: CenarioFinanceiro
@@ -47,6 +47,8 @@ class AnaliseRisco:
     spread_sugerido: float | None
 
 
+# Valores ilustrativos (ordem de grandeza CONAB safra 2023/24); parametrizaveis
+# via construtor — calibrar antes de uso real em credito.
 CUSTOS_POR_UF = {
     "MT": 4850.0,
     "GO": 4650.0,
@@ -142,24 +144,30 @@ class RiskTranslator:
 
     def estimar_probabilidade_quebra(
         self,
-        pred_p10: float,
-        pred_p50: float,
-        pred_p90: float,
+        pred_lower_80: float,
+        pred: float,
+        pred_upper_80: float,
         custo_ha: float,
         preco_saca: float,
     ) -> float:
-        """Estima probabilidade de quebra (receita < custo)."""
+        """Estima probabilidade de quebra (receita < custo).
+
+        Aproximacao: trata os limites do intervalo conformal 80% como quantis
+        10%/90% e interpola linearmente entre eles. A cobertura empirica do
+        conformal pode divergir do nominal (ver results/conformal_result.json),
+        entao o numero e indicativo, nao uma probabilidade calibrada.
+        """
         breakeven_kg_ha = (custo_ha / preco_saca) * 60
 
-        if breakeven_kg_ha <= pred_p10:
+        if breakeven_kg_ha <= pred_lower_80:
             return 0.05
 
-        elif breakeven_kg_ha <= pred_p50:
-            frac = (breakeven_kg_ha - pred_p10) / (pred_p50 - pred_p10)
+        elif breakeven_kg_ha <= pred:
+            frac = (breakeven_kg_ha - pred_lower_80) / (pred - pred_lower_80)
             return 0.10 + frac * 0.40
 
-        elif breakeven_kg_ha <= pred_p90:
-            frac = (breakeven_kg_ha - pred_p50) / (pred_p90 - pred_p50)
+        elif breakeven_kg_ha <= pred_upper_80:
+            frac = (breakeven_kg_ha - pred) / (pred_upper_80 - pred)
             return 0.50 + frac * 0.40
 
         else:
@@ -224,9 +232,9 @@ class RiskTranslator:
 
     def calcular_risco(
         self,
-        pred_p10: float,
-        pred_p50: float,
-        pred_p90: float,
+        pred_lower_80: float,
+        pred: float,
+        pred_upper_80: float,
         uf: str,
         ano: int = 2024,
         preco_saca: float = None,
@@ -238,11 +246,13 @@ class RiskTranslator:
         preco = preco_saca or self.preco_saca_default
         custo = custo_ha or self.get_custo(uf)
 
-        cenario_pessimista = self.calcular_cenario("pessimista", pred_p10, preco, custo)
-        cenario_base = self.calcular_cenario("base", pred_p50, preco, custo)
-        cenario_otimista = self.calcular_cenario("otimista", pred_p90, preco, custo)
+        cenario_pessimista = self.calcular_cenario("pessimista", pred_lower_80, preco, custo)
+        cenario_base = self.calcular_cenario("base", pred, preco, custo)
+        cenario_otimista = self.calcular_cenario("otimista", pred_upper_80, preco, custo)
 
-        prob_quebra = self.estimar_probabilidade_quebra(pred_p10, pred_p50, pred_p90, custo, preco)
+        prob_quebra = self.estimar_probabilidade_quebra(
+            pred_lower_80, pred, pred_upper_80, custo, preco
+        )
 
         rating, rating_descricao = self.atribuir_rating(prob_quebra)
 
@@ -253,9 +263,9 @@ class RiskTranslator:
             municipio=municipio,
             uf=uf,
             ano=ano,
-            pred_p10_kg_ha=pred_p10,
-            pred_p50_kg_ha=pred_p50,
-            pred_p90_kg_ha=pred_p90,
+            pred_lower_80_kg_ha=pred_lower_80,
+            pred_kg_ha=pred,
+            pred_upper_80_kg_ha=pred_upper_80,
             cenario_pessimista=cenario_pessimista,
             cenario_base=cenario_base,
             cenario_otimista=cenario_otimista,
@@ -271,9 +281,9 @@ class RiskTranslator:
     def analisar_dataframe(
         self,
         df: pd.DataFrame,
-        col_p10: str = "pred_p10_kg_ha",
-        col_p50: str = "pred_p50_kg_ha",
-        col_p90: str = "pred_p90_kg_ha",
+        col_lower: str = "pred_lower_80_kg_ha",
+        col_pred: str = "pred_produtividade_kg_ha",
+        col_upper: str = "pred_upper_80_kg_ha",
         col_uf: str = "uf",
         col_ano: str = "ano",
         col_cod_ibge: str = "cod_ibge",
@@ -285,9 +295,9 @@ class RiskTranslator:
 
         for _, row in df.iterrows():
             analise = self.calcular_risco(
-                pred_p10=row[col_p10],
-                pred_p50=row[col_p50],
-                pred_p90=row[col_p90],
+                pred_lower_80=row[col_lower],
+                pred=row[col_pred],
+                pred_upper_80=row[col_upper],
                 uf=row[col_uf],
                 ano=row.get(col_ano, 2024),
                 preco_saca=preco_saca,
@@ -301,9 +311,9 @@ class RiskTranslator:
                     "municipio": analise.municipio,
                     "uf": analise.uf,
                     "ano": analise.ano,
-                    "pred_p10_kg_ha": analise.pred_p10_kg_ha,
-                    "pred_p50_kg_ha": analise.pred_p50_kg_ha,
-                    "pred_p90_kg_ha": analise.pred_p90_kg_ha,
+                    "pred_lower_80_kg_ha": analise.pred_lower_80_kg_ha,
+                    "pred_kg_ha": analise.pred_kg_ha,
+                    "pred_upper_80_kg_ha": analise.pred_upper_80_kg_ha,
                     "receita_pessimista": analise.cenario_pessimista.receita_ha,
                     "receita_base": analise.cenario_base.receita_ha,
                     "receita_otimista": analise.cenario_otimista.receita_ha,
@@ -332,9 +342,9 @@ ANALISE DE RISCO - {analise.municipio or "N/A"}/{analise.uf} - SAFRA {analise.an
 {sep}
 
 PREVISAO DE PRODUTIVIDADE:
-  Cenario Pessimista (p10):   {analise.pred_p10_kg_ha:.0f} kg/ha ({analise.pred_p10_kg_ha / 60:.1f} sc/ha)
-  Cenario Base (p50):         {analise.pred_p50_kg_ha:.0f} kg/ha ({analise.pred_p50_kg_ha / 60:.1f} sc/ha)
-  Cenario Otimista (p90):     {analise.pred_p90_kg_ha:.0f} kg/ha ({analise.pred_p90_kg_ha / 60:.1f} sc/ha)
+  Cenario Pessimista (lim. inf. 80%): {analise.pred_lower_80_kg_ha:.0f} kg/ha ({self.kg_para_sacas(analise.pred_lower_80_kg_ha):.1f} sc/ha)
+  Cenario Base (previsao):            {analise.pred_kg_ha:.0f} kg/ha ({self.kg_para_sacas(analise.pred_kg_ha):.1f} sc/ha)
+  Cenario Otimista (lim. sup. 80%):   {analise.pred_upper_80_kg_ha:.0f} kg/ha ({self.kg_para_sacas(analise.pred_upper_80_kg_ha):.1f} sc/ha)
 
 ANALISE FINANCEIRA:
   Preco considerado:          R$ {analise.preco_saca:.2f}/saca
@@ -361,37 +371,31 @@ RECOMENDACAO:
 
 
 def main():
-    """Exemplo de uso do RiskTranslator."""
+    """Gera analise de risco a partir das previsoes mais recentes."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    from src.common.io import PROJECT_ROOT
+
+    pred_path = PROJECT_ROOT / "results" / "predictions_2024_2025.parquet"
+    out_path = PROJECT_ROOT / "results" / "risk_analysis_2024_2025.parquet"
+
     logger.info("=" * 70)
-    logger.info("EXEMPLO DE USO DO RISK TRANSLATOR")
+    logger.info("ANALISE DE RISCO DE CREDITO")
     logger.info("=" * 70)
+
+    df_pred = pd.read_parquet(pred_path)
+    logger.info(f"Previsoes carregadas: {len(df_pred):,}")
 
     translator = RiskTranslator()
+    df_risco = translator.analisar_dataframe(df_pred)
 
-    logger.info("\n--- Exemplo 1: Sorriso/MT (Centro-Oeste, estavel) ---")
-    analise_mt = translator.calcular_risco(
-        pred_p10=3200,
-        pred_p50=3450,
-        pred_p90=3700,
-        uf="MT",
-        ano=2024,
-        municipio="Sorriso",
-        preco_saca=115.0,
-    )
-    logger.info(translator.gerar_relatorio_texto(analise_mt))
+    df_risco.to_parquet(out_path, index=False)
+    logger.info(f"Analise de risco salva em: {out_path}")
 
-    logger.info("\n--- Exemplo 2: Nao-Me-Toque/RS (Sul, volatil) ---")
-    analise_rs = translator.calcular_risco(
-        pred_p10=1800,
-        pred_p50=2400,
-        pred_p90=3000,
-        uf="RS",
-        ano=2024,
-        municipio="Nao-Me-Toque",
-        preco_saca=115.0,
-    )
-    logger.info(translator.gerar_relatorio_texto(analise_rs))
+    logger.info("\nDistribuicao de ratings:")
+    for rating, count in df_risco["rating"].value_counts().sort_index().items():
+        logger.info(f"  {rating}: {count:,} ({count / len(df_risco) * 100:.1f}%)")
+
+    return df_risco
 
 
 if __name__ == "__main__":

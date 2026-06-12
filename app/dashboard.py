@@ -17,6 +17,7 @@ try:
     import streamlit as st
     from plotly.subplots import make_subplots
 
+    from src.common.constants import REGION_SUL
     from src.modeling.train_conformal import ConformalCalibrator
 
     STREAMLIT_AVAILABLE = True
@@ -30,8 +31,9 @@ except ImportError:
 PREDICTIONS_PATH = PROJECT_ROOT / "results" / "predictions_2024_2025.parquet"
 RISK_PATH = PROJECT_ROOT / "results" / "risk_analysis_2024_2025.parquet"
 DRIFT_PATH = PROJECT_ROOT / "results" / "drift_report.md"
-TRAINING_RESULT_PATH = PROJECT_ROOT / "results" / "training_result.json"
-EVALUATION_PATH = PROJECT_ROOT / "results" / "evaluation_report.md"
+REGIONAL_RESULT_PATH = PROJECT_ROOT / "results" / "regional_training_result.json"
+BASELINES_PATH = PROJECT_ROOT / "results" / "baselines.json"
+TEMPORAL_CV_PATH = PROJECT_ROOT / "results" / "temporal_cv_results.json"
 
 
 def ano_para_safra(ano: int) -> str:
@@ -65,10 +67,28 @@ def load_risk_analysis():
 
 
 @st.cache_data
-def load_training_result():
-    """Carrega resultado do treinamento."""
-    if TRAINING_RESULT_PATH.exists():
-        with open(TRAINING_RESULT_PATH, encoding="utf-8") as f:
+def load_regional_result():
+    """Carrega resultado do treinamento regional (modelo de producao)."""
+    if REGIONAL_RESULT_PATH.exists():
+        with open(REGIONAL_RESULT_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+@st.cache_data
+def load_baselines():
+    """Carrega metricas dos baselines."""
+    if BASELINES_PATH.exists():
+        with open(BASELINES_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+@st.cache_data
+def load_temporal_cv():
+    """Carrega resultados da validacao cruzada temporal."""
+    if TEMPORAL_CV_PATH.exists():
+        with open(TEMPORAL_CV_PATH, encoding="utf-8") as f:
             return json.load(f)
     return None
 
@@ -87,36 +107,28 @@ def render_model_info_sidebar():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Sobre o Modelo")
 
-    training = load_training_result()
+    regional = load_regional_result()
 
-    if training:
+    if regional:
+        combined = regional.get("combined_metrics", {})
+        n_train = regional.get("sul_metrics", {}).get("n_train", 0) + regional.get(
+            "cerrado_metrics", {}
+        ).get("n_train", 0)
         st.sidebar.markdown(
             f"""
-        **Versao:** v2.0
+        **Versao:** v3 (LightGBM regional Sul/Cerrado)
 
-        **Dados de Treino:**
-        - Safras 1999/00 a 2017/18
-        - {training.get("train_metrics", {}).get("n_samples", "N/A")} amostras
+        **Features:** {len(regional.get("feature_names", []))}
 
-        **Validacao (2018/19 a 2020/21):**
-        - MAE: {training.get("val_metrics", {}).get("mae_kg_ha", 0):.0f} kg/ha
+        **Treino (2000-2021):** {n_train:,} amostras
 
-        **Teste (2021/22 a 2022/23):**
-        - MAE: {training.get("test_metrics", {}).get("mae_kg_ha", 0):.0f} kg/ha
+        **Teste (safra 2022/23):**
+        - MAE: {combined.get("mae_kg_ha", 0):.0f} kg/ha ({combined.get("mae_sacas_ha", 0):.1f} sc/ha)
+        - MAPE: {combined.get("mape_percent", 0):.1f}%
         """
         )
     else:
-        st.sidebar.markdown(
-            """
-        **Versao:** v2.0
-
-        **Dados de Treino:**
-        - Safras 1999/00 a 2017/18
-
-        **Teste (2021/22 a 2022/23):**
-        - MAE: ~550 kg/ha
-        """
-        )
+        st.sidebar.warning("Execute `python -m src.modeling.train_regional` para gerar metricas.")
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Legenda de Safra")
@@ -142,12 +154,21 @@ def page_visao_geral():
         )
         return
 
+    regional = load_regional_result()
+    mae_txt = ""
+    if regional:
+        combined = regional.get("combined_metrics", {})
+        mae_txt = (
+            f"- Testado na safra 2022/23 com MAE de {combined.get('mae_kg_ha', 0):.0f} kg/ha "
+            f"({combined.get('mae_sacas_ha', 0):.1f} sacas/ha)\n"
+        )
+
     st.info(
-        """
+        f"""
     **Sobre estas previsoes:**
-    - Modelo treinado com dados de 2000-2018 (19 safras)
-    - Testado em 2019-2023 com MAE de ~550 kg/ha (~9 sacas/ha)
-    - Previsoes abaixo sao para safras **futuras** usando clima ja observado (modalidade ex-post)
+    - Modelos LightGBM regionais (Sul / Cerrado) treinados com dados de 2000-2021
+    {mae_txt}- Previsoes abaixo usam clima ja observado (modalidade ex-post); o historico de
+    produtividade usa o ultimo dado PAM disponivel, que pode estar defasado
     """
     )
 
@@ -182,12 +203,12 @@ def page_visao_geral():
         )
 
     with col3:
-        if "pred_p10_kg_ha" in df_filtrado.columns:
-            media_p10 = df_filtrado["pred_p10_kg_ha"].mean()
+        if "pred_lower_80_kg_ha" in df_filtrado.columns:
+            media_lower = df_filtrado["pred_lower_80_kg_ha"].mean()
             st.metric(
-                "Cenario Pessimista (p10)",
-                f"{media_p10:.0f} kg/ha",
-                help="Valor abaixo do qual ha apenas 10% de probabilidade",
+                "Cenario Pessimista",
+                f"{media_lower:.0f} kg/ha",
+                help="Limite inferior do intervalo conformal de 80%",
             )
 
     with col4:
@@ -295,12 +316,12 @@ def page_validacao():
             """
         **Divisao Temporal (sem vazamento):**
 
-        | Conjunto | Safras | Anos PAM | Uso |
-        |----------|--------|----------|-----|
-        | Treino | 1999/00 a 2017/18 | 2000-2018 | Aprendizado |
-        | Validacao | 2018/19 a 2020/21 | 2019-2021 | Early stopping |
-        | Teste | 2021/22 a 2022/23 | 2022-2023 | Avaliacao final |
-        | Previsao | 2023/24 a 2024/25 | 2024-2025 | Producao |
+        | Conjunto | Safra | Ano PAM | Uso |
+        |----------|-------|---------|-----|
+        | Treino | ate 2020/21 | 2000-2021 | Aprendizado |
+        | Validacao | 2021/22 | 2022 | Early stopping |
+        | Teste | 2022/23 | 2023 | Avaliacao final |
+        | Previsao | 2023/24+ | 2024+ | Producao |
         """
         )
 
@@ -310,105 +331,121 @@ def page_validacao():
         **Por que esta divisao?**
 
         - O modelo **nunca ve dados futuros** durante o treino
-        - Simula situacao real de previsao
-        - Safra 2022/23 teve seca severa no Sul (La Nina)
-        - Teste em condicoes adversas = validacao robusta
+        - Validacao em 2022 (seca historica no RS, La Nina): early stopping
+          calibrado no caso mais dificil
+        - Teste em 2023 intocado durante o desenvolvimento
+        - CV temporal expanding (2016-2023) confirma que o resultado
+          nao depende de um unico ano de teste
         """
         )
 
-    st.subheader("Metricas no Conjunto de Teste (2022-2023)")
+    st.subheader("Metricas no Conjunto de Teste (safra 2022/23)")
 
-    training = load_training_result()
+    regional = load_regional_result()
+    baselines = load_baselines()
 
-    if training:
-        test_metrics = training.get("test_metrics", {})
+    if regional:
+        combined = regional.get("combined_metrics", {})
 
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            mae = test_metrics.get("mae_kg_ha", 551)
+            mae = combined.get("mae_kg_ha", 0)
             st.metric(
                 "MAE", f"{mae:.0f} kg/ha", f"{mae / 60:.1f} sc/ha", help="Erro Medio Absoluto"
             )
 
         with col2:
-            mape = test_metrics.get("mape_percent", 37.6)
-            st.metric("MAPE", f"{mape:.1f}%", help="Erro Percentual Medio")
+            st.metric(
+                "MAPE", f"{combined.get('mape_percent', 0):.1f}%", help="Erro Percentual Medio"
+            )
 
         with col3:
-            st.metric("vs Baseline (MA3)", "+1.6%", help="Melhoria sobre media movel 3 anos")
+            if baselines:
+                ma3 = baselines["baseline_ma3"]["test_metrics"]["mae_kg_ha"]
+                gain = (ma3 - mae) / ma3 * 100
+                st.metric(
+                    "vs Baseline (MA3)",
+                    f"-{gain:.1f}%",
+                    help=f"Reducao de MAE sobre media movel 3 anos ({ma3:.0f} kg/ha)",
+                )
 
         with col4:
-            st.metric("Amostras de Teste", "4.669", help="Municipios x anos no teste")
+            st.metric(
+                "Amostras de Teste",
+                f"{combined.get('n_samples', 0):,}",
+                help="Municipios no teste",
+            )
 
-    st.subheader("Erro por Regiao (Teste 2022-2023)")
+        st.subheader("Erro por Regiao (Teste 2022/23)")
 
-    st.warning(
+        sul_test = regional.get("sul_metrics", {}).get("test", {})
+        cerrado_test = regional.get("cerrado_metrics", {}).get("test", {})
+        erro_regiao = pd.DataFrame(
+            {
+                "Regiao": ["Sul (RS, PR, SC)", "Cerrado/Outros"],
+                "MAE (kg/ha)": [sul_test.get("mae_kg_ha", 0), cerrado_test.get("mae_kg_ha", 0)],
+                "MAPE (%)": [sul_test.get("mape_percent", 0), cerrado_test.get("mape_percent", 0)],
+                "Municipios": [sul_test.get("n_samples", 0), cerrado_test.get("n_samples", 0)],
+            }
+        )
+        st.dataframe(erro_regiao, use_container_width=True, hide_index=True)
+
+        st.markdown(
+            """
+        O erro maior no Sul reflete a volatilidade climatica da regiao
+        (La Nina / El Nino), nao um defeito do modelo: o baseline tambem
+        erra mais no Sul.
         """
-    **Atencao:** O modelo tem dificuldade maior na regiao Sul (RS, PR, SC)
-    devido a maior volatilidade climatica e impacto de La Nina.
-    """
-    )
+        )
+    else:
+        st.error("Execute `python -m src.modeling.train_regional` primeiro.")
 
-    erro_uf = pd.DataFrame(
-        {
-            "UF": ["RS", "PR", "MS", "SC", "SP", "GO", "MG", "MT", "BA", "TO"],
-            "MAE (kg/ha)": [911, 870, 882, 631, 376, 350, 320, 280, 418, 250],
-            "MAPE (%)": [92.2, 68.2, 72.8, 30.3, 12.1, 10.5, 9.8, 7.5, 19.8, 7.2],
-        }
-    )
+    st.subheader("Validacao Cruzada Temporal (Expanding Window)")
 
-    fig = px.bar(
-        erro_uf.sort_values("MAE (kg/ha)", ascending=True),
-        x="MAE (kg/ha)",
-        y="UF",
-        orientation="h",
-        color="MAE (kg/ha)",
-        color_continuous_scale="Reds",
-        text="MAE (kg/ha)",
-    )
-    fig.update_traces(textposition="outside")
-    fig.update_layout(
-        height=400,
-        xaxis_title="MAE (kg/ha) - Menor e melhor",
-        yaxis_title="",
-        showlegend=False,
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    cv = load_temporal_cv()
+    if cv:
+        folds = pd.DataFrame(
+            [
+                {
+                    "Safra": ano_para_safra(f["test_year"]),
+                    "MAE (kg/ha)": f.get("metrics_combined", {}).get("mae_kg_ha"),
+                    "MAPE (%)": f.get("metrics_combined", {}).get("mape_percent"),
+                    "n": f.get("n_test"),
+                }
+                for f in cv.get("folds", [])
+            ]
+        )
 
-    st.subheader("Erro por Safra (Teste)")
+        fig2 = px.bar(
+            folds,
+            x="Safra",
+            y="MAE (kg/ha)",
+            text=folds["MAE (kg/ha)"].apply(lambda x: f"{x:.0f}"),
+        )
+        fig2.update_traces(textposition="outside", marker_color="#3498db")
+        summary = cv.get("summary", {})
+        fig2.add_hline(
+            y=summary.get("mean_mae_kg_ha", 0),
+            line_dash="dash",
+            line_color="orange",
+            annotation_text=f"Media: {summary.get('mean_mae_kg_ha', 0):.0f} kg/ha",
+        )
+        fig2.update_layout(height=400, xaxis_title="Safra de teste", yaxis_title="MAE (kg/ha)")
+        st.plotly_chart(fig2, use_container_width=True)
 
-    erro_ano = pd.DataFrame(
-        {
-            "Safra": ["2018/19", "2019/20", "2020/21", "2021/22", "2022/23"],
-            "MAE (kg/ha)": [400, 459, 342, 680, 426],
-            "Evento": ["Normal", "Normal", "Normal", "La Nina Forte", "Normal"],
-        }
-    )
-
-    fig2 = px.bar(
-        erro_ano,
-        x="Safra",
-        y="MAE (kg/ha)",
-        color="Evento",
-        color_discrete_map={"Normal": "#3498db", "La Nina Forte": "#e74c3c"},
-        text="MAE (kg/ha)",
-    )
-    fig2.update_traces(textposition="outside")
-    fig2.update_layout(
-        height=400,
-        xaxis_title="Safra",
-        yaxis_title="MAE (kg/ha)",
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-
-    st.markdown(
+        st.markdown(
+            f"""
+        Cada fold treina do zero com dados ate 2 anos antes da safra de teste
+        (validacao no ano intermediario). MAE medio:
+        **{summary.get("mean_mae_kg_ha", 0):.0f} +/- {summary.get("std_mae_kg_ha", 0):.0f} kg/ha**
+        em {summary.get("n_folds", 0)} safras independentes. O pior ano
+        ({ano_para_safra(summary.get("worst_year", 2022))}) corresponde a seca
+        historica de La Nina no Sul.
         """
-    **Observacao:** A safra 2021/22 teve seca severa no Sul devido a La Nina,
-    resultando em erro maior. O modelo captura parcialmente esse efeito atraves
-    das features de ENSO (El Nino / La Nina).
-    """
-    )
+        )
+    else:
+        st.info("Execute `python -m scripts.temporal_cv` para gerar a validacao cruzada.")
 
 
 def page_municipio():
@@ -453,46 +490,46 @@ def page_municipio():
     with col1:
         st.markdown("### Previsao de Produtividade")
 
-        if "pred_p10_kg_ha" in row.index:
+        if "pred_lower_80_kg_ha" in row.index:
             fig = go.Figure()
 
             fig.add_trace(
                 go.Bar(
                     name="Intervalo 80%",
                     x=["Previsao"],
-                    y=[row["pred_p90_kg_ha"] - row["pred_p10_kg_ha"]],
-                    base=[row["pred_p10_kg_ha"]],
+                    y=[row["pred_upper_80_kg_ha"] - row["pred_lower_80_kg_ha"]],
+                    base=[row["pred_lower_80_kg_ha"]],
                     marker_color="rgba(52, 152, 219, 0.3)",
                     width=0.5,
                 )
             )
 
             fig.add_hline(
-                y=row["pred_p10_kg_ha"],
+                y=row["pred_lower_80_kg_ha"],
                 line_dash="dash",
                 line_color="red",
-                annotation_text=f"p10: {row['pred_p10_kg_ha']:.0f}",
+                annotation_text=f"inferior 80%: {row['pred_lower_80_kg_ha']:.0f}",
             )
 
             fig.add_hline(
-                y=row["pred_p50_kg_ha"],
+                y=row["pred_produtividade_kg_ha"],
                 line_dash="solid",
                 line_color="blue",
-                annotation_text=f"p50: {row['pred_p50_kg_ha']:.0f}",
+                annotation_text=f"previsao: {row['pred_produtividade_kg_ha']:.0f}",
             )
 
             fig.add_hline(
-                y=row["pred_p90_kg_ha"],
+                y=row["pred_upper_80_kg_ha"],
                 line_dash="dash",
                 line_color="green",
-                annotation_text=f"p90: {row['pred_p90_kg_ha']:.0f}",
+                annotation_text=f"superior 80%: {row['pred_upper_80_kg_ha']:.0f}",
             )
 
             fig.update_layout(
                 height=350,
                 yaxis_title="Produtividade (kg/ha)",
                 showlegend=False,
-                yaxis=dict(range=[0, row["pred_p90_kg_ha"] * 1.2]),
+                yaxis=dict(range=[0, row["pred_upper_80_kg_ha"] * 1.2]),
             )
 
             st.plotly_chart(fig, use_container_width=True)
@@ -504,13 +541,13 @@ def page_municipio():
         """
         )
         st.markdown(
-            f"| Pessimista (p10) | {row.get('pred_p10_kg_ha', 0):.0f} kg/ha | {row.get('pred_p10_kg_ha', 0) / 60:.1f} |"
+            f"| Pessimista (lim. inf. 80%) | {row.get('pred_lower_80_kg_ha', 0):.0f} kg/ha | {row.get('pred_lower_80_kg_ha', 0) / 60:.1f} |"
         )
         st.markdown(
-            f"| **Base (p50)** | **{row.get('pred_p50_kg_ha', row['pred_produtividade_kg_ha']):.0f} kg/ha** | **{row.get('pred_p50_kg_ha', row['pred_produtividade_kg_ha']) / 60:.1f}** |"
+            f"| **Base (previsao)** | **{row['pred_produtividade_kg_ha']:.0f} kg/ha** | **{row['pred_produtividade_kg_ha'] / 60:.1f}** |"
         )
         st.markdown(
-            f"| Otimista (p90) | {row.get('pred_p90_kg_ha', 0):.0f} kg/ha | {row.get('pred_p90_kg_ha', 0) / 60:.1f} |"
+            f"| Otimista (lim. sup. 80%) | {row.get('pred_upper_80_kg_ha', 0):.0f} kg/ha | {row.get('pred_upper_80_kg_ha', 0) / 60:.1f} |"
         )
 
     with col2:
@@ -557,40 +594,42 @@ def page_municipio():
             )
 
     st.markdown("---")
-    st.subheader("O que influenciou esta previsao? (SHAP)")
+    st.subheader("Perfil do municipio (SHAP da ultima safra observada)")
 
     with st.spinner("Gerando explicabilidade (isso pode levar alguns segundos)..."):
         try:
-            MODEL_PATH = PROJECT_ROOT / "models" / "model_sul.pkl"
-            gbm = joblib.load(MODEL_PATH)
+            uf_cod = int(str(int(row["cod_ibge"]))[:2])
+            is_sul = uf_cod in REGION_SUL
+            model_file = "model_sul.pkl" if is_sul else "model_cerrado.pkl"
+            gbm = joblib.load(PROJECT_ROOT / "models" / model_file)
             features_treino = gbm.feature_name()
 
             FEATURES_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final.parquet"
 
             if not FEATURES_PATH.exists():
-                st.warning("Arquivo de features climáticas não encontrado para gerar o SHAP.")
+                st.warning("dataset_final.parquet nao encontrado para gerar o SHAP.")
             else:
                 df_features = pd.read_parquet(FEATURES_PATH)
 
                 df_features["cod_ibge"] = df_features["cod_ibge"].astype(int)
                 df_features["ano"] = df_features["ano"].astype(int)
                 cod_ibge_busca = int(row["cod_ibge"])
-                ano_busca = int(ano)
 
-                X_municipio_clima = df_features[
-                    (df_features["cod_ibge"] == cod_ibge_busca) & (df_features["ano"] == ano_busca)
-                ]
+                hist_mun = df_features[df_features["cod_ibge"] == cod_ibge_busca]
 
-                if len(X_municipio_clima) == 0:
-                    anos_disponiveis = df_features["ano"].unique()
-                    st.error(
-                        f"Erro no filtro! Procuramos: IBGE {cod_ibge_busca} e Ano {ano_busca}."
-                    )
-                    st.info(
-                        f"O arquivo 'dataset_final.parquet' contém apenas os anos: {sorted(anos_disponiveis)}"
-                    )
+                if len(hist_mun) == 0:
+                    st.info(f"Municipio {cod_ibge_busca} sem historico no dataset de treino.")
                 else:
-                    X_municipio_final = X_municipio_clima[features_treino]
+                    ultima = hist_mun[hist_mun["ano"] == hist_mun["ano"].max()]
+                    ano_shap = int(ultima["ano"].iloc[0])
+                    st.caption(
+                        f"As features da previsao {safra} nao sao persistidas; o grafico "
+                        f"mostra os drivers da ultima safra observada "
+                        f"({ano_para_safra(ano_shap)}) com o modelo "
+                        f"{'Sul' if is_sul else 'Cerrado'}."
+                    )
+
+                    X_municipio_final = ultima[features_treino]
 
                     explainer = shap.TreeExplainer(gbm)
                     shap_values = explainer(X_municipio_final)
@@ -602,7 +641,7 @@ def page_municipio():
                     st.pyplot(fig_shap)
 
         except Exception as e:
-            st.warning(f"Erro técnico ao gerar SHAP: {e}")
+            st.warning(f"Erro tecnico ao gerar SHAP: {e}")
 
 
 def page_regional():
@@ -628,12 +667,18 @@ def page_regional():
         "cod_ibge": "count",
     }
 
-    if "pred_p10_kg_ha" in df_ano.columns:
-        agg_dict["pred_p10_kg_ha"] = "mean"
-        agg_dict["pred_p90_kg_ha"] = "mean"
+    if "pred_lower_80_kg_ha" in df_ano.columns:
+        agg_dict["pred_lower_80_kg_ha"] = "mean"
+        agg_dict["pred_upper_80_kg_ha"] = "mean"
 
     df_uf = df_ano.groupby("uf").agg(agg_dict).round(1)
-    df_uf.columns = ["Prod. Media", "Desvio Padrao", "Municipios", "p10 Medio", "p90 Medio"]
+    df_uf.columns = [
+        "Prod. Media",
+        "Desvio Padrao",
+        "Municipios",
+        "Inf. 80% Medio",
+        "Sup. 80% Medio",
+    ]
     df_uf = df_uf.reset_index()
     df_uf = df_uf.sort_values("Prod. Media", ascending=False)
 
@@ -652,8 +697,8 @@ def page_regional():
             {
                 "Prod. Media": "{:.0f}",
                 "Desvio Padrao": "{:.0f}",
-                "p10 Medio": "{:.0f}",
-                "p90 Medio": "{:.0f}",
+                "Inf. 80% Medio": "{:.0f}",
+                "Sup. 80% Medio": "{:.0f}",
                 "% Alto Risco": "{:.1f}%",
             }
         ),
@@ -698,19 +743,22 @@ def page_monitoramento():
 
     st.subheader("Status Atual")
 
+    regional = load_regional_result()
+    n_features = len(regional.get("feature_names", [])) if regional else 0
+
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("Versao", "v3.0 (Fase 2)")
+        st.metric("Versao", "v3 (regional)")
 
     with col2:
-        st.metric("Features", "48")
+        st.metric("Features", f"{n_features}")
 
     with col3:
-        st.metric("Treino ate", "Safra 2017/18")
+        st.metric("Treino ate", "Safra 2020/21")
 
     with col4:
-        st.metric("Ultima Validacao", "Safra 2022/23")
+        st.metric("Teste", "Safra 2022/23")
 
     st.subheader("Analise de Drift")
 
@@ -719,57 +767,50 @@ def page_monitoramento():
     if drift_report:
         with st.expander("Ver Relatorio Completo de Drift", expanded=False):
             st.code(drift_report, language="text")
-
-        st.warning(
-            """
-        **Drift Detectado:**
-        - `oni_avg` (ENSO): Mais eventos La Nina no periodo recente
-        - `hot_days_count`: Aumento de dias quentes
-        - `produtividade_ma3`: Tendencia de aumento da produtividade
-
-        **Recomendacao:** Considerar retreino com dados ate safra 2022/23
-        """
-        )
-
     else:
         st.info(
             "Execute `python -m src.monitoring.drift_analysis` para gerar o relatorio de drift."
         )
 
-    st.subheader("Degradacao Temporal")
+    st.subheader("Erro por Safra (CV Temporal)")
 
-    erro_ano = pd.DataFrame(
-        {
-            "Safra": ["2018/19", "2019/20", "2020/21", "2021/22", "2022/23"],
-            "MAE (kg/ha)": [400, 459, 342, 680, 426],
-            "Variacao": [0, 14.8, -14.5, 70.0, 6.5],
-        }
-    )
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Bar(
-            x=erro_ano["Safra"],
-            y=erro_ano["MAE (kg/ha)"],
-            marker_color=["#3498db", "#3498db", "#2ecc71", "#e74c3c", "#3498db"],
-            text=erro_ano["MAE (kg/ha)"],
-            textposition="outside",
+    cv = load_temporal_cv()
+    if cv:
+        folds = pd.DataFrame(
+            [
+                {
+                    "Safra": ano_para_safra(f["test_year"]),
+                    "MAE (kg/ha)": f.get("metrics_combined", {}).get("mae_kg_ha"),
+                }
+                for f in cv.get("folds", [])
+            ]
         )
-    )
 
-    fig.add_hline(
-        y=500, line_dash="dash", line_color="orange", annotation_text="Limite Aceitavel (500 kg/ha)"
-    )
-
-    fig.update_layout(
-        height=400,
-        xaxis_title="Safra",
-        yaxis_title="MAE (kg/ha)",
-        showlegend=False,
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(
+            go.Bar(
+                x=folds["Safra"],
+                y=folds["MAE (kg/ha)"],
+                marker_color="#3498db",
+                text=folds["MAE (kg/ha)"].apply(lambda x: f"{x:.0f}"),
+                textposition="outside",
+            )
+        )
+        fig.add_hline(
+            y=500,
+            line_dash="dash",
+            line_color="orange",
+            annotation_text="Limite Aceitavel (500 kg/ha)",
+        )
+        fig.update_layout(
+            height=400,
+            xaxis_title="Safra",
+            yaxis_title="MAE (kg/ha)",
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Execute `python -m scripts.temporal_cv` para gerar o historico de erro.")
 
 
 def main():
