@@ -1,4 +1,8 @@
-"""Pipeline completo: atualiza dados, rebuild features, retrain e gera previsoes.
+"""Gera previsoes para a safra alvo a partir dos dados e modelos ja existentes.
+
+Nao faz ingest nem retrain: constroi as features de inferencia e aplica os
+modelos regionais (fallback: modelo global). Safras em andamento recebem flag
+de parcialidade (clima_completo / enso_disponivel) no parquet de saida.
 
 Uso:
     python -m scripts.update_pipeline                    # safra corrente
@@ -8,39 +12,20 @@ Uso:
 from __future__ import annotations
 
 import argparse
-import json
+import calendar
 import logging
-import pickle
 from datetime import date
 
 import numpy as np
 import pandas as pd
 
-from src.common.climate_aggregation import aggregate_climate_duckdb
-from src.common.features import (
-    add_enso_features,
-    add_enso_interactions,
-    add_regional_features,
-    add_soil_climate_interactions,
-    add_soil_features,
-    calculate_climate_anomalies,
-)
 from src.common.io import PROJECT_ROOT, load_config, load_municipalities
-from src.common.new_source_features import (
-    add_fertilizante_features,
-    add_irrigacao_features,
-    add_new_source_interactions,
-    add_sinistro_features,
-    add_uso_solo_features,
-)
-from src.common.phenology import (
-    filter_phenology_window_regional,
-    get_default_phenology,
-    get_regional_phenology,
-)
+from src.common.phenology import get_default_phenology, get_regional_phenology
+from src.features.build_features import load_climate_data, load_ndvi_data
 from src.inference.predict import (
-    _fill_missing_anomalies,
-    calculate_historical_features,
+    build_inference_features,
+    generate_predictions_for,
+    load_inference_models,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -66,64 +51,46 @@ def estimate_area(df_target: pd.DataFrame, year: int) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-def build_prediction_features(
+def add_completeness_flags(
+    dp: pd.DataFrame,
     df_climate: pd.DataFrame,
-    df_target: pd.DataFrame,
-    df_enso: pd.DataFrame,
-    years_to_predict: list[int],
     features_config: dict,
-    lat_lookup: dict[int, float],
+    years_to_predict: list[int],
 ) -> pd.DataFrame:
-    """Constroi features para predicao. Usa mesma logica de predict.py main()."""
-    fc = features_config
-    bt, ht = 10.0, 32.0
-    for feat in fc["features"]["climate_features"]:
-        if feat["name"] == "gdd_accumulated":
-            bt = feat.get("base_temp", 10.0)
-        if feat["name"] == "hot_days_count":
-            ht = feat.get("threshold", 32.0)
-    trm = fc.get("features", {}).get("trend_ref_year_min", 2000)
-    trx = fc.get("features", {}).get("trend_ref_year_max", 2025)
+    """Marca previsoes de safras com janela climatica incompleta ou ENSO ausente.
 
-    # Municipios produtores (min 1 ano desde 2018 — mais inclusivo que predict.py)
-    municipalities = df_target[df_target["ano"] >= 2018]["cod_ibge"].unique().tolist()
-    logger.info(f"Municipios produtores (>=1 ano desde 2018): {len(municipalities):,}")
+    Fases fenologicas ausentes entram como 0 mm na agregacao (nao NaN), entao
+    uma safra em andamento gera anomalias de seca ficticias — a flag e a unica
+    forma de distinguir previsao validavel de extrapolacao parcial.
+    """
+    dp = dp.copy()
 
-    # Agregar clima
-    hist_start = min(years_to_predict) - 6
-    all_years = list(range(hist_start, min(years_to_predict))) + years_to_predict
+    end_months = [get_default_phenology(features_config)["end_month"]] + [
+        cal.get("end_month", 4) for cal in get_regional_phenology(features_config).values()
+    ]
+    end_month = max(end_months)
 
-    df_f = df_climate[df_climate["cod_ibge"].isin(municipalities)].copy()
-    df_f = filter_phenology_window_regional(
-        df_f, get_regional_phenology(fc), get_default_phenology(fc)
-    )
-    df_f = df_f[df_f["crop_year"].isin(all_years)]
+    clima_max = df_climate["date"].max()
 
-    df_all = aggregate_climate_duckdb(df_f, bt, ht, lat_lookup=lat_lookup)
-    df_all = add_enso_features(df_all, df_enso)
-    df_all = calculate_climate_anomalies(df_all, min_years=5)
+    dp["clima_completo"] = True
+    dp["enso_disponivel"] = dp["oni_avg"].notna() if "oni_avg" in dp.columns else False
 
-    dp = df_all[df_all["ano"].isin(years_to_predict)].copy()
+    for year in years_to_predict:
+        window_end = pd.Timestamp(year, end_month, calendar.monthrange(year, end_month)[1])
+        if clima_max < window_end:
+            dp.loc[dp["ano"] == year, "clima_completo"] = False
+            logger.warning(
+                f"  [!] Safra {year - 1}/{str(year)[2:]}: clima disponivel ate "
+                f"{clima_max.date()}, janela vai ate {window_end.date()} — "
+                f"PREVISAO PARCIAL, fases ausentes tratadas como sem chuva/calor"
+            )
 
-    # Reutiliza calculate_historical_features de predict.py
-    dp = calculate_historical_features(dp, df_target, years_to_predict, trm, trx)
-
-    # Reutiliza _fill_missing_anomalies de predict.py
-    _fill_missing_anomalies(dp)
-
-    dp = add_regional_features(dp)
-    dp = add_enso_interactions(dp)
-
-    soil_path = PROJECT_ROOT / "data" / "processed" / "soil_properties.parquet"
-    if soil_path.exists():
-        dp = add_soil_features(dp, pd.read_parquet(soil_path))
-        dp = add_soil_climate_interactions(dp)
-
-    dp = add_irrigacao_features(dp)
-    dp = add_fertilizante_features(dp)
-    dp = add_sinistro_features(dp)
-    dp = add_uso_solo_features(dp)
-    dp = add_new_source_interactions(dp)
+        n_sem_enso = int((~dp.loc[dp["ano"] == year, "enso_disponivel"]).sum())
+        if n_sem_enso > 0:
+            logger.warning(
+                f"  [!] Safra {year - 1}/{str(year)[2:]}: {n_sem_enso:,} linhas sem ONI "
+                f"(ENSO nao cobre o ano) — features ENSO entram como NaN"
+            )
 
     return dp
 
@@ -182,7 +149,20 @@ def print_report(dp: pd.DataFrame, df_target: pd.DataFrame, years: list[int]):
             )
 
     out_path = PROJECT_ROOT / "results" / f"previsao_safra_{years[0]}_{years[-1]}.parquet"
-    cols = [c for c in ["cod_ibge", "ano", "pred_kg_ha", "pred_sc_ha"] if c in dp.columns]
+    cols = [
+        c
+        for c in [
+            "cod_ibge",
+            "ano",
+            "pred_kg_ha",
+            "pred_sc_ha",
+            "pred_lower_80_kg_ha",
+            "pred_upper_80_kg_ha",
+            "clima_completo",
+            "enso_disponivel",
+        ]
+        if c in dp.columns
+    ]
     dp[cols].to_parquet(out_path, index=False)
     logger.info(f"\nPrevisoes salvas em: {out_path}")
 
@@ -203,35 +183,46 @@ def main():
     years_to_predict = [year_end - 1, year_end]
     logger.info(f"Safras alvo: {[f'{y - 1}/{str(y)[2:]}' for y in years_to_predict]}")
 
-    model_path = PROJECT_ROOT / "models" / f"model_{args.model_version}.pkl"
-    meta_path = PROJECT_ROOT / "models" / f"model_{args.model_version}_metadata.json"
-    if not model_path.exists():
-        logger.error(f"Modelo nao encontrado: {model_path}")
-        return
-
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
-    with open(meta_path) as f:
-        meta = json.load(f)
-    feat_names = meta["feature_names"]
-    logger.info(f"Modelo: {args.model_version} ({len(feat_names)} features)")
+    model_info = load_inference_models()
+    feat_names = model_info["feature_names"]
+    logger.info(f"Modelo: {model_info['model_version']} ({len(feat_names)} features)")
 
     fc = load_config("features")
-    v2p = PROJECT_ROOT / "data" / "processed" / "climate_daily_v2.parquet"
-    cp = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
-    df_climate = pd.read_parquet(v2p if v2p.exists() else cp)
-    df_climate["date"] = pd.to_datetime(df_climate["date"])
+    df_climate = load_climate_data()
 
     df_target = pd.read_parquet(PROJECT_ROOT / "data" / "processed" / "target_soja.parquet")
     df_enso = pd.read_parquet(PROJECT_ROOT / "data" / "processed" / "oni_enso.parquet")
     df_mun = load_municipalities(columns=["cod_ibge", "lat"])
     lat_lookup = dict(zip(df_mun["cod_ibge"], df_mun["lat"]))
 
-    dp = build_prediction_features(df_climate, df_target, df_enso, years_to_predict, fc, lat_lookup)
+    municipalities = df_target[df_target["ano"] >= 2018]["cod_ibge"].unique().tolist()
+    logger.info(f"Municipios produtores (>=1 ano desde 2018): {len(municipalities):,}")
 
-    available = [f for f in feat_names if f in dp.columns]
-    dp["pred_kg_ha"] = model.predict(dp[available].values)
-    dp["pred_sc_ha"] = dp["pred_kg_ha"] / 60
+    dp = build_inference_features(
+        df_climate,
+        df_target,
+        df_enso,
+        load_ndvi_data(),
+        municipalities,
+        years_to_predict,
+        fc,
+        lat_lookup,
+    )
+
+    missing_feats = [f for f in feat_names if f not in dp.columns]
+    if missing_feats:
+        raise ValueError(f"Features exigidas pelo modelo ausentes na inferencia: {missing_feats}")
+
+    dp = generate_predictions_for(model_info, dp)
+
+    dp = dp.rename(
+        columns={
+            "pred_produtividade_kg_ha": "pred_kg_ha",
+            "pred_produtividade_sacas_ha": "pred_sc_ha",
+        }
+    )
+
+    dp = add_completeness_flags(dp, df_climate, fc, years_to_predict)
 
     print_report(dp, df_target, years_to_predict)
 

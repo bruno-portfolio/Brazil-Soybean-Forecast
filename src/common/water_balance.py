@@ -32,7 +32,7 @@ def _eto_hargreaves_vec(
     )
 
     temp_range = np.maximum(0, tmax - tmin)
-    eto = 0.0023 * (tmean + 17.8) * np.sqrt(temp_range) * Ra
+    eto = 0.0023 * (tmean + 17.8) * np.sqrt(temp_range) * Ra * 0.408
     return np.maximum(0, eto)
 
 

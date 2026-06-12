@@ -19,6 +19,8 @@ class ConformalCalibrator:
 
     def fit(self, y_true: np.ndarray, y_pred: np.ndarray) -> ConformalCalibrator:
         """Calibra o predictor usando residuos absolutos."""
+        if len(y_true) == 0:
+            raise ValueError("Conjunto de calibracao vazio.")
         self.conformity_scores = np.abs(y_true - y_pred)
         self.n_calib = len(y_true)
         return self
@@ -34,7 +36,7 @@ class ConformalCalibrator:
         adjusted_quantile = min(1.0, (1 - alpha) * (n + 1) / n)
         q = np.quantile(self.conformity_scores, adjusted_quantile)
 
-        lower = y_pred - q
+        lower = np.maximum(0.0, y_pred - q)
         upper = y_pred + q
 
         return lower, upper

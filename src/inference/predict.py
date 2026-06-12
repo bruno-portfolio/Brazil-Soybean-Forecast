@@ -24,6 +24,12 @@ from src.common.phenology import (
     get_default_phenology,
     get_regional_phenology,
 )
+from src.features.build_features import (
+    add_ndvi_climate_interactions,
+    add_ndvi_features,
+    load_climate_data,
+    load_ndvi_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +43,6 @@ if not MODEL_PATH.exists():
     if _fallback.exists():
         MODEL_PATH = _fallback
         MODEL_METADATA_PATH = PROJECT_ROOT / "results" / "training_result.json"
-CLIMATE_PATH = PROJECT_ROOT / "data" / "processed" / "climate_daily.parquet"
 TARGET_PATH = PROJECT_ROOT / "data" / "processed" / "target_soja.parquet"
 ENSO_PATH = PROJECT_ROOT / "data" / "processed" / "oni_enso.parquet"
 OUTPUT_PATH = PROJECT_ROOT / "results" / "predictions_2024_2025.parquet"
@@ -50,15 +55,6 @@ REGIONAL_METADATA_PATH = PROJECT_ROOT / "results" / "regional_training_result.js
 
 CONFORMAL_SUL_PATH = PROJECT_ROOT / "models" / "conformal_sul.pkl"
 CONFORMAL_CERRADO_PATH = PROJECT_ROOT / "models" / "conformal_cerrado.pkl"
-
-
-QUANTILE_MODELS_PATH = {
-    0.05: PROJECT_ROOT / "models" / "quantile_p05.pkl",
-    0.10: PROJECT_ROOT / "models" / "quantile_p10.pkl",
-    0.50: PROJECT_ROOT / "models" / "quantile_p50.pkl",
-    0.90: PROJECT_ROOT / "models" / "quantile_p90.pkl",
-    0.95: PROJECT_ROOT / "models" / "quantile_p95.pkl",
-}
 
 
 def load_model():
@@ -120,39 +116,10 @@ def load_conformal_calibrators() -> tuple:
     return calibrator_sul, calibrator_cerrado
 
 
-def load_quantile_models() -> dict:
-    """Carrega modelos quantilicos para intervalos de confianca."""
-    logger.info("Carregando modelos quantilicos...")
-
-    models = {}
-    for quantile, path in QUANTILE_MODELS_PATH.items():
-        if path.exists():
-            with open(path, "rb") as f:
-                models[quantile] = pickle.load(f)
-            logger.info(f"  p{int(quantile * 100):02d} carregado de: {path}")
-        else:
-            logger.warning(f"  p{int(quantile * 100):02d} NAO encontrado: {path}")
-
-    if len(models) == 0:
-        logger.warning("  Nenhum modelo quantilico encontrado!")
-        return None
-
-    return models
-
-
 def load_model_metadata() -> dict:
     """Carrega metadados do modelo."""
     with open(MODEL_METADATA_PATH, encoding="utf-8") as f:
         return json.load(f)
-
-
-def load_climate_data() -> pd.DataFrame:
-    """Carrega dados de clima diario."""
-    logger.info("Carregando dados de clima...")
-    df = pd.read_parquet(CLIMATE_PATH)
-    df["date"] = pd.to_datetime(df["date"])
-    logger.info(f"  Registros de clima: {len(df):,}")
-    return df
 
 
 def load_target_data() -> pd.DataFrame:
@@ -214,7 +181,11 @@ def calculate_historical_features(
     trend_ref_min: int = 2000,
     trend_ref_max: int = 2025,
 ) -> pd.DataFrame:
-    """Calcula features historicas (lag1, ma3, trend) para previsao."""
+    """Calcula features historicas para previsao, com a mesma semantica do treino:
+    lag1/ma3 sobre anos anteriores, mun_yield_hist_mean/volatility com expanding
+    de minimo 3 anos, e area_colhida_ha proxy (ultimo valor conhecido) para as
+    features de fontes novas que dependem de area.
+    """
     logger.info("Calculando features historicas...")
 
     df = df.copy()
@@ -230,21 +201,28 @@ def calculate_historical_features(
             continue
 
         for year in years_to_predict:
-            past_data = mun_hist[mun_hist["ano"] < year]["produtividade_kg_ha"].values
+            past = mun_hist[mun_hist["ano"] < year]
+            past_data = past["produtividade_kg_ha"].values
 
             if len(past_data) == 0:
                 continue
 
-            lag1 = past_data[-1]
-
-            ma3 = past_data[-3:].mean() if len(past_data) >= 1 else np.nan
+            hist_mean = past_data.mean() if len(past_data) >= 3 else np.nan
+            volatility = (
+                past_data.std(ddof=1) / (hist_mean + 1e-8) if len(past_data) >= 3 else np.nan
+            )
 
             historical_features.append(
                 {
                     "cod_ibge": cod_ibge,
                     "ano": year,
-                    "produtividade_lag1": lag1,
-                    "produtividade_ma3": ma3,
+                    "produtividade_lag1": past_data[-1],
+                    "produtividade_ma3": past_data[-3:].mean(),
+                    "mun_yield_hist_mean": hist_mean,
+                    "mun_yield_volatility": volatility,
+                    "area_colhida_ha": past["area_colhida_ha"].values[-1]
+                    if "area_colhida_ha" in past.columns
+                    else np.nan,
                 }
             )
 
@@ -259,21 +237,17 @@ def calculate_historical_features(
     return df
 
 
-def generate_predictions(
-    model, df: pd.DataFrame, feature_names: list, quantile_models: dict = None
-) -> pd.DataFrame:
-    """Gera previsoes usando o modelo principal e modelos quantilicos."""
+def generate_predictions(model, df: pd.DataFrame, feature_names: list) -> pd.DataFrame:
+    """Gera previsoes pontuais usando o modelo unico (fallback sem intervalos)."""
     logger.info("Gerando previsoes (modelo unico)...")
 
     X = df[feature_names].copy()
 
     missing = X.isnull().sum()
     if missing.sum() > 0:
-        logger.warning("  Valores faltantes encontrados:")
+        logger.warning("  Valores faltantes (NaN tratado nativamente pelo LightGBM):")
         for col, count in missing[missing > 0].items():
             logger.warning(f"    {col}: {count}")
-
-        X = X.fillna(X.median())
 
     predictions = model.predict(X)
 
@@ -282,20 +256,6 @@ def generate_predictions(
     df["pred_produtividade_sacas_ha"] = predictions / 60
 
     logger.info(f"  Previsoes ponto: {len(predictions):,}")
-
-    if quantile_models is not None and len(quantile_models) > 0:
-        logger.info("  Gerando intervalos de confianca...")
-
-        for quantile, q_model in quantile_models.items():
-            q_pred = q_model.predict(X)
-            q_str = f"p{int(quantile * 100):02d}"
-            df[f"pred_{q_str}_kg_ha"] = q_pred
-            df[f"pred_{q_str}_sacas_ha"] = q_pred / 60
-
-        if 0.10 in quantile_models and 0.90 in quantile_models:
-            df["intervalo_80_largura"] = df["pred_p90_kg_ha"] - df["pred_p10_kg_ha"]
-
-        logger.info(f"    Quantis gerados: {list(quantile_models.keys())}")
 
     return df
 
@@ -320,10 +280,9 @@ def generate_predictions_regional(
 
     missing = X.isnull().sum()
     if missing.sum() > 0:
-        logger.warning("  Valores faltantes encontrados:")
+        logger.warning("  Valores faltantes (NaN tratado nativamente pelo LightGBM):")
         for col, count in missing[missing > 0].items():
             logger.warning(f"    {col}: {count}")
-        X = X.fillna(X.median())
 
     n = len(df)
     pred_point = np.zeros(n)
@@ -368,14 +327,13 @@ def generate_predictions_regional(
     df["pred_produtividade_kg_ha"] = pred_point
     df["pred_produtividade_sacas_ha"] = pred_point / 60
 
-    df["pred_p10_kg_ha"] = pred_lower_80
-    df["pred_p50_kg_ha"] = pred_point
-    df["pred_p90_kg_ha"] = pred_upper_80
-    df["pred_p05_kg_ha"] = pred_lower_90
-    df["pred_p95_kg_ha"] = pred_upper_90
+    df["pred_lower_80_kg_ha"] = pred_lower_80
+    df["pred_upper_80_kg_ha"] = pred_upper_80
+    df["pred_lower_90_kg_ha"] = pred_lower_90
+    df["pred_upper_90_kg_ha"] = pred_upper_90
 
-    df["intervalo_80_largura"] = df["pred_p90_kg_ha"] - df["pred_p10_kg_ha"]
-    df["intervalo_90_largura"] = df["pred_p95_kg_ha"] - df["pred_p05_kg_ha"]
+    df["intervalo_80_largura"] = df["pred_upper_80_kg_ha"] - df["pred_lower_80_kg_ha"]
+    df["intervalo_90_largura"] = df["pred_upper_90_kg_ha"] - df["pred_lower_90_kg_ha"]
 
     df = df.drop(columns=["uf_cod"])
 
@@ -400,7 +358,7 @@ def calculate_dataset_hash(df: pd.DataFrame) -> str:
     return hashlib.md5(data_str.encode()).hexdigest()[:12]
 
 
-def save_predictions(df: pd.DataFrame, model_metadata: dict, years: list) -> None:
+def save_predictions(df: pd.DataFrame, years: list, model_info: dict) -> None:
     """Salva previsoes e metadados."""
     logger.info("Salvando previsoes...")
 
@@ -411,11 +369,10 @@ def save_predictions(df: pd.DataFrame, model_metadata: dict, years: list) -> Non
         "ano",
         "pred_produtividade_kg_ha",
         "pred_produtividade_sacas_ha",
-        "pred_p05_kg_ha",
-        "pred_p10_kg_ha",
-        "pred_p50_kg_ha",
-        "pred_p90_kg_ha",
-        "pred_p95_kg_ha",
+        "pred_lower_90_kg_ha",
+        "pred_lower_80_kg_ha",
+        "pred_upper_80_kg_ha",
+        "pred_upper_90_kg_ha",
         "intervalo_80_largura",
         "produtividade_lag1",
         "produtividade_ma3",
@@ -435,16 +392,20 @@ def save_predictions(df: pd.DataFrame, model_metadata: dict, years: list) -> Non
 
     metadata = {
         "inference_date": datetime.now().isoformat(),
-        "model_version": MODEL_VERSION,
+        "model_version": model_info["model_version"],
         "prediction_type": "ex-post",
-        "prediction_description": "Previsoes usando clima observado (nao e forecast real)",
+        "prediction_description": (
+            "Previsoes usando clima observado (nao e forecast real). "
+            "produtividade_lag1/ma3 usam o ultimo dado PAM disponivel, que pode "
+            "estar defasado em relacao ao ano previsto."
+        ),
         "years_predicted": years,
         "n_municipalities": df["cod_ibge"].nunique(),
         "n_predictions": len(df),
         "dataset_hash": calculate_dataset_hash(df),
-        "model_path": str(MODEL_PATH),
-        "feature_names": model_metadata["feature_names"],
-        "model_test_metrics": model_metadata.get("test_metrics", {}),
+        "model_paths": model_info["model_paths"],
+        "feature_names": model_info["feature_names"],
+        "model_test_metrics": model_info["test_metrics"],
         "statistics_by_year": {},
         "statistics_by_uf": {},
     }
@@ -476,41 +437,69 @@ def save_predictions(df: pd.DataFrame, model_metadata: dict, years: list) -> Non
     logger.info(f"  Metadados salvos em: {OUTPUT_JSON_PATH}")
 
 
-def main():
-    """Pipeline principal de inferencia."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    logger.info("=" * 70)
-    logger.info("INFERENCIA DE PRODUTIVIDADE DE SOJA 2024-2025")
-    logger.info("Modalidade: Ex-post (clima observado)")
-    logger.info("Fase 3: Modelos regionais + Conformal Prediction")
-    logger.info("=" * 70)
-
-    years_to_predict = [2024, 2025]
-
+def load_inference_models() -> dict:
+    """Resolve os modelos de inferencia: regionais + conformal, com fallback global."""
     model_sul, model_cerrado = load_regional_models()
     calibrator_sul, calibrator_cerrado = load_conformal_calibrators()
 
-    use_regional = model_sul is not None and model_cerrado is not None
+    if model_sul is not None and model_cerrado is not None:
+        logger.info("[OK] Usando modelos regionais com intervalos conformal")
+        with open(REGIONAL_METADATA_PATH) as f:
+            metadata = json.load(f)
+        return {
+            "use_regional": True,
+            "models": (model_sul, model_cerrado),
+            "calibrators": (calibrator_sul, calibrator_cerrado),
+            "feature_names": metadata["feature_names"],
+            "model_paths": [str(MODEL_SUL_PATH), str(MODEL_CERRADO_PATH)],
+            "model_version": "v3-regional",
+            "test_metrics": metadata.get("combined_metrics", {}),
+        }
 
-    if use_regional:
-        logger.info("\n[OK] Usando modelos regionais com intervalos conformal")
-        if REGIONAL_METADATA_PATH.exists():
-            with open(REGIONAL_METADATA_PATH) as f:
-                model_metadata = json.load(f)
-            feature_names = model_metadata["feature_names"]
-        else:
-            model_metadata = load_model_metadata()
-            feature_names = model_metadata["feature_names"]
-    else:
-        logger.warning("\n[!] Modelos regionais nao disponiveis, usando modelo unico")
-        model = load_model()
-        model_metadata = load_model_metadata()
-        feature_names = model_metadata["feature_names"]
-        quantile_models = load_quantile_models()
+    logger.warning("[!] Modelos regionais nao disponiveis, usando modelo unico")
+    metadata = load_model_metadata()
+    return {
+        "use_regional": False,
+        "models": (load_model(),),
+        "calibrators": (None, None),
+        "feature_names": metadata["feature_names"],
+        "model_paths": [str(MODEL_PATH)],
+        "model_version": MODEL_VERSION,
+        "test_metrics": metadata.get("test_metrics", {}),
+    }
 
-    logger.info(f"Features do modelo: {len(feature_names)}")
 
-    features_config = load_config("features")
+def generate_predictions_for(model_info: dict, df: pd.DataFrame) -> pd.DataFrame:
+    """Aplica os modelos resolvidos por load_inference_models ao df de features."""
+    if model_info["use_regional"]:
+        model_sul, model_cerrado = model_info["models"]
+        calibrator_sul, calibrator_cerrado = model_info["calibrators"]
+        return generate_predictions_regional(
+            model_sul,
+            model_cerrado,
+            calibrator_sul,
+            calibrator_cerrado,
+            df,
+            model_info["feature_names"],
+        )
+    return generate_predictions(model_info["models"][0], df, model_info["feature_names"])
+
+
+def build_inference_features(
+    df_climate: pd.DataFrame,
+    df_target: pd.DataFrame,
+    df_enso: pd.DataFrame,
+    df_ndvi: pd.DataFrame,
+    municipalities: list,
+    years_to_predict: list,
+    features_config: dict,
+    lat_lookup: dict,
+) -> pd.DataFrame:
+    """Constroi as features de inferencia com a mesma sequencia do treino.
+
+    Unico ponto de construcao de features fora do build_features: qualquer
+    feature nova entra aqui uma vez e vale para predict.py e update_pipeline.
+    """
     base_temp = 10.0
     hot_threshold = 32.0
     for feat in features_config["features"]["climate_features"]:
@@ -522,18 +511,9 @@ def main():
     trend_ref_min = features_config.get("features", {}).get("trend_ref_year_min", 2000)
     trend_ref_max = features_config.get("features", {}).get("trend_ref_year_max", 2025)
 
-    df_climate = load_climate_data()
-    df_target = load_target_data()
-    df_enso = load_enso_data()
-
-    df_mun = load_municipalities(columns=["cod_ibge", "lat"])
-    lat_lookup = dict(zip(df_mun["cod_ibge"], df_mun["lat"]))
-
-    municipalities = get_soy_producing_municipalities(df_target, min_years=3)
-
     from src.common.climate_aggregation import aggregate_climate_duckdb
 
-    hist_start = min(years_to_predict) - 6
+    hist_start = trend_ref_min
     all_years = list(range(hist_start, min(years_to_predict))) + years_to_predict
 
     df_filtered = df_climate[df_climate["cod_ibge"].isin(municipalities)].copy()
@@ -569,6 +549,9 @@ def main():
     else:
         logger.warning("soil_properties.parquet nao encontrado, solo nao sera adicionado")
 
+    df = add_ndvi_features(df, df_ndvi)
+    df = add_ndvi_climate_interactions(df)
+
     from src.common.new_source_features import (
         add_fertilizante_features,
         add_irrigacao_features,
@@ -583,12 +566,47 @@ def main():
     df = add_uso_solo_features(df)
     df = add_new_source_interactions(df)
 
-    if use_regional:
-        df = generate_predictions_regional(
-            model_sul, model_cerrado, calibrator_sul, calibrator_cerrado, df, feature_names
-        )
-    else:
-        df = generate_predictions(model, df, feature_names, quantile_models)
+    return df
+
+
+def main():
+    """Pipeline principal de inferencia."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logger.info("=" * 70)
+    logger.info("INFERENCIA DE PRODUTIVIDADE DE SOJA 2024-2025")
+    logger.info("Modalidade: Ex-post (clima observado)")
+    logger.info("Fase 3: Modelos regionais + Conformal Prediction")
+    logger.info("=" * 70)
+
+    years_to_predict = [2024, 2025]
+
+    model_info = load_inference_models()
+    logger.info(f"Features do modelo: {len(model_info['feature_names'])}")
+
+    features_config = load_config("features")
+
+    df_climate = load_climate_data()
+    df_target = load_target_data()
+    df_enso = load_enso_data()
+    df_ndvi = load_ndvi_data()
+
+    df_mun = load_municipalities(columns=["cod_ibge", "lat"])
+    lat_lookup = dict(zip(df_mun["cod_ibge"], df_mun["lat"]))
+
+    municipalities = get_soy_producing_municipalities(df_target, min_years=3)
+
+    df = build_inference_features(
+        df_climate,
+        df_target,
+        df_enso,
+        df_ndvi,
+        municipalities,
+        years_to_predict,
+        features_config,
+        lat_lookup,
+    )
+
+    df = generate_predictions_for(model_info, df)
 
     df = add_municipality_info(df)
 
@@ -608,11 +626,14 @@ def main():
         logger.info(f"    Min: {df_year['pred_produtividade_kg_ha'].min():.1f} kg/ha")
         logger.info(f"    Max: {df_year['pred_produtividade_kg_ha'].max():.1f} kg/ha")
 
-        if "pred_p10_kg_ha" in df_year.columns:
-            logger.info("  Intervalos de confianca 80% (p10-p90):")
-            logger.info(f"    p10 medio: {df_year['pred_p10_kg_ha'].mean():.1f} kg/ha")
-            logger.info(f"    p50 medio: {df_year['pred_p50_kg_ha'].mean():.1f} kg/ha")
-            logger.info(f"    p90 medio: {df_year['pred_p90_kg_ha'].mean():.1f} kg/ha")
+        if "pred_lower_80_kg_ha" in df_year.columns:
+            logger.info("  Intervalos conformal 80%:")
+            logger.info(
+                f"    Limite inferior medio: {df_year['pred_lower_80_kg_ha'].mean():.1f} kg/ha"
+            )
+            logger.info(
+                f"    Limite superior medio: {df_year['pred_upper_80_kg_ha'].mean():.1f} kg/ha"
+            )
             logger.info(f"    Largura media: {df_year['intervalo_80_largura'].mean():.1f} kg/ha")
 
     logger.info("\nTop 5 UFs por numero de municipios:")
@@ -620,9 +641,11 @@ def main():
     for uf in uf_counts.head(5).index:
         df_uf = df[df["uf"] == uf]
         mean_pred = df_uf["pred_produtividade_kg_ha"].mean()
-        logger.info(f"  {uf}: {len(df_uf) // 2} municipios, media {mean_pred:.0f} kg/ha")
+        logger.info(
+            f"  {uf}: {df_uf['cod_ibge'].nunique()} municipios, media {mean_pred:.0f} kg/ha"
+        )
 
-    save_predictions(df, model_metadata, years_to_predict)
+    save_predictions(df, years_to_predict, model_info)
 
     logger.info("\n" + "=" * 70)
     logger.info("INFERENCIA CONCLUIDA!")

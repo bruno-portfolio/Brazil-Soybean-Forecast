@@ -51,7 +51,7 @@ features:
       end_month: 2
       phases:
         plantio: [10, 11]
-        vegetativo: [12, 1]
+        vegetativo: [12]
         enchimento: [1, 2]
 
     # Sul: plantio mais tardio (outubro-novembro)
