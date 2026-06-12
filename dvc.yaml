@@ -1,113 +1,158 @@
+# Pipeline DVC: orquestracao de DAG com artefatos versionados no git (cache: false).
+# Stages de ingest sao frozen (dependem de APIs externas/exports manuais) — rode
+# sob demanda com `dvc repro --force <stage>`. O core (build_features em diante)
+# reproduz a partir dos parquets commitados.
+
 stages:
   ingest_municipalities:
     cmd: python -m src.ingest.municipalities
+    frozen: true
     deps:
       - src/ingest/municipalities.py
       - configs/geo.yaml
     outs:
-      - data/processed/municipalities.parquet
+      - data/processed/municipalities.parquet:
+          cache: false
 
   ingest_target:
     cmd: python -m src.ingest.pam
+    frozen: true
     deps:
       - src/ingest/pam.py
       - configs/target.yaml
       - data/processed/municipalities.parquet
     outs:
-      - data/processed/target_soja.parquet
+      - data/processed/target_soja.parquet:
+          cache: false
 
   ingest_climate:
     cmd: python -m src.ingest.climate_power
+    frozen: true
     deps:
       - src/ingest/climate_power.py
       - configs/climate.yaml
       - data/processed/municipalities.parquet
     outs:
-      - data/processed/climate_daily.parquet
-    cache: true
+      - data/processed/climate_daily.parquet:
+          cache: false
+
+  ingest_enso:
+    cmd: python -m src.ingest.enso
+    frozen: true
+    deps:
+      - src/ingest/enso.py
+    outs:
+      - data/processed/oni_enso.parquet:
+          cache: false
 
   ingest_soil:
     cmd: python -m src.ingest.soilgrids
+    frozen: true
     deps:
       - src/ingest/soilgrids.py
       - configs/soil.yaml
       - data/processed/municipalities.parquet
       - data/processed/target_soja.parquet
     outs:
-      - data/processed/soil_properties.parquet
-    cache: true
+      - data/processed/soil_properties.parquet:
+          cache: false
 
   ingest_ndvi:
     cmd: python -m src.ingest.ndvi
+    frozen: true
     deps:
       - src/ingest/ndvi.py
       - configs/ndvi.yaml
-      - data/raw/ndvi/appeears_ndvi.csv
     outs:
-      - data/processed/ndvi_safra.parquet
-    cache: true
+      - data/processed/ndvi_safra.parquet:
+          cache: false
 
   ingest_pivos:
     cmd: python -m src.ingest.pivos
+    frozen: true
     deps:
       - src/ingest/pivos.py
       - data/processed/municipalities.parquet
     outs:
-      - data/processed/pivos_irrigacao.parquet
-    cache: true
+      - data/processed/pivos_irrigacao.parquet:
+          cache: false
 
   ingest_fertilizante:
     cmd: python -m src.ingest.fertilizante
+    frozen: true
     deps:
       - src/ingest/fertilizante.py
       - configs/target.yaml
     outs:
-      - data/processed/fertilizante_uf.parquet
-    cache: true
+      - data/processed/fertilizante_uf.parquet:
+          cache: false
 
   ingest_seguro_rural:
     cmd: python -m src.ingest.seguro_rural
+    frozen: true
     deps:
       - src/ingest/seguro_rural.py
       - configs/target.yaml
     outs:
-      - data/processed/seguro_rural.parquet
-    cache: true
+      - data/processed/seguro_rural.parquet:
+          cache: false
 
   ingest_mapbiomas:
     cmd: python -m src.ingest.mapbiomas_soja
+    frozen: true
     deps:
       - src/ingest/mapbiomas_soja.py
       - data/processed/municipalities.parquet
     outs:
-      - data/processed/mapbiomas_soja.parquet
-    cache: true
+      - data/processed/mapbiomas_soja.parquet:
+          cache: false
 
   build_features:
     cmd: python -m src.features.build_features
     deps:
       - src/features/build_features.py
       - src/common/water_balance.py
+      - src/common/climate_aggregation.py
+      - src/common/features.py
       - src/common/new_source_features.py
+      - src/common/phenology.py
       - configs/features.yaml
       - data/processed/target_soja.parquet
-      - data/processed/climate_daily.parquet
       - data/processed/soil_properties.parquet
+      - data/processed/oni_enso.parquet
+      - data/processed/ndvi_safra.parquet
+      - data/processed/pivos_irrigacao.parquet
+      - data/processed/fertilizante_uf.parquet
+      - data/processed/seguro_rural.parquet
+      - data/processed/mapbiomas_soja.parquet
     outs:
+      - data/processed/dataset_final.parquet:
+          cache: false
+
+  baselines:
+    cmd: python -m src.modeling.baselines
+    deps:
+      - src/modeling/baselines.py
+      - configs/split.yaml
       - data/processed/dataset_final.parquet
+    metrics:
+      - results/baselines.json:
+          cache: false
 
   train:
     cmd: python -m src.modeling.train
     deps:
       - src/modeling/train.py
-      - src/modeling/baselines.py
       - configs/model.yaml
       - configs/split.yaml
       - data/processed/dataset_final.parquet
     outs:
-      - models/model_v2.pkl
+      - models/model_v2.pkl:
+          cache: false
+      - models/model_v2_metadata.json:
+          cache: false
     metrics:
-      - results/metrics.json:
+      - results/training_result_v2.json:
           cache: false
 
   train_regional:
@@ -118,31 +163,59 @@ stages:
       - configs/split.yaml
       - data/processed/dataset_final.parquet
     outs:
-      - models/model_sul.pkl
-      - models/model_cerrado.pkl
+      - models/model_sul.pkl:
+          cache: false
+      - models/model_cerrado.pkl:
+          cache: false
+    metrics:
+      - results/regional_training_result.json:
+          cache: false
 
   train_conformal:
     cmd: python -m src.modeling.train_conformal
     deps:
       - src/modeling/train_conformal.py
+      - src/common/conformal.py
       - models/model_sul.pkl
       - models/model_cerrado.pkl
       - data/processed/dataset_final.parquet
     outs:
-      - models/conformal_sul.pkl
-      - models/conformal_cerrado.pkl
+      - models/conformal_sul.pkl:
+          cache: false
+      - models/conformal_cerrado.pkl:
+          cache: false
+    metrics:
+      - results/conformal_result.json:
+          cache: false
+
+  temporal_cv:
+    cmd: python -m scripts.temporal_cv
+    deps:
+      - scripts/temporal_cv.py
+      - configs/model.yaml
+      - data/processed/dataset_final.parquet
+    metrics:
+      - results/temporal_cv_results.json:
+          cache: false
 
   evaluate:
     cmd: python -m src.evaluation.evaluate
     deps:
       - src/evaluation/evaluate.py
+      - configs/split.yaml
       - models/model_v2.pkl
+      - results/baselines.json
       - data/processed/dataset_final.parquet
+    outs:
+      - results/evaluation_report.md:
+          cache: false
     plots:
-      - results/predictions_scatter.png:
+      - results/scatter_test.png:
+          cache: false
+      - results/error_by_year.png:
           cache: false
     metrics:
-      - results/evaluation_report.json:
+      - results/evaluation_results.json:
           cache: false
 
   explain:
@@ -151,19 +224,46 @@ stages:
       - src/evaluation/explainability.py
       - models/model_v2.pkl
       - data/processed/dataset_final.parquet
+    outs:
+      - results/feature_importance.csv:
+          cache: false
+      - results/explainability_report.md:
+          cache: false
     plots:
       - results/shap_summary.png:
           cache: false
-      - results/feature_importance.png:
+      - results/shap_bar.png:
+          cache: false
+    metrics:
+      - results/explainability_results.json:
           cache: false
 
   predict:
     cmd: python -m src.inference.predict
     deps:
       - src/inference/predict.py
-      - src/common/water_balance.py
+      - src/common/conformal.py
       - src/common/new_source_features.py
-      - models/model_v2.pkl
-      - data/processed/climate_daily.parquet
+      - models/model_sul.pkl
+      - models/model_cerrado.pkl
+      - models/conformal_sul.pkl
+      - models/conformal_cerrado.pkl
+      - results/regional_training_result.json
+      - data/processed/target_soja.parquet
+      - data/processed/oni_enso.parquet
+      - data/processed/soil_properties.parquet
+      - data/processed/ndvi_safra.parquet
     outs:
+      - results/predictions_2024_2025.parquet:
+          cache: false
+      - results/predictions_metadata.json:
+          cache: false
+
+  risk:
+    cmd: python -m src.business.risk_translator
+    deps:
+      - src/business/risk_translator.py
       - results/predictions_2024_2025.parquet
+    outs:
+      - results/risk_analysis_2024_2025.parquet:
+          cache: false

@@ -43,8 +43,13 @@ data/raw/
 # data/processed/*.parquet
 !data/processed/.gitkeep
 
-# Models (large, use DVC)
+# Models: artefatos de producao pequenos sao versionados no git
 models/*.pkl
+!models/model_sul.pkl
+!models/model_cerrado.pkl
+!models/conformal_sul.pkl
+!models/conformal_cerrado.pkl
+!models/model_v2.pkl
 !models/.gitkeep
 
 # Results - keep for portfolio
@@ -78,7 +83,6 @@ Thumbs.db
 nul
 
 # DVC
-/data/raw/*.parquet.dvc
 .dvc/tmp/
 .dvc/cache/
 
