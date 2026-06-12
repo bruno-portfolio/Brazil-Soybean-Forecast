@@ -41,7 +41,7 @@ async def fetch_seguro_rural(year_start: int, year_end: int) -> pd.DataFrame:
 
     merged = merged.sort_values(["cd_ibge", "ano_apolice"])
     merged["sinistro_rate_3yr"] = merged.groupby("cd_ibge")["sinistro_rate"].transform(
-        lambda x: x.rolling(3, min_periods=1).mean()
+        lambda x: x.shift(1).rolling(3, min_periods=1).mean()
     )
 
     merged = merged.rename(columns={"cd_ibge": "cod_ibge", "ano_apolice": "ano"})

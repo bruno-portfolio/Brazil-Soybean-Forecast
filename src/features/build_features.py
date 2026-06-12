@@ -140,29 +140,21 @@ def calculate_historical_features(
 
     df["produtividade_lag1"] = df.groupby("cod_ibge")["produtividade_kg_ha"].shift(1)
 
-    df["produtividade_ma3"] = (
-        df.groupby("cod_ibge")["produtividade_kg_ha"]
-        .shift(1)
-        .rolling(window=3, min_periods=1)
-        .mean()
-        .reset_index(level=0, drop=True)
+    grouped = df.groupby("cod_ibge")["produtividade_kg_ha"]
+
+    df["produtividade_ma3"] = grouped.transform(
+        lambda x: x.shift(1).rolling(window=3, min_periods=1).mean()
     )
 
     df["trend"] = (df["ano"] - trend_ref_min) / (trend_ref_max - trend_ref_min)
 
     # Media historica expandida por municipio (sem leakage: shift(1))
-    df["mun_yield_hist_mean"] = (
-        df.groupby("cod_ibge")["produtividade_kg_ha"]
-        .apply(lambda x: x.shift(1).expanding(min_periods=3).mean())
-        .reset_index(level=0, drop=True)
+    df["mun_yield_hist_mean"] = grouped.transform(
+        lambda x: x.shift(1).expanding(min_periods=3).mean()
     )
 
     # Volatilidade historica (CV = std / mean)
-    mun_std = (
-        df.groupby("cod_ibge")["produtividade_kg_ha"]
-        .apply(lambda x: x.shift(1).expanding(min_periods=3).std())
-        .reset_index(level=0, drop=True)
-    )
+    mun_std = grouped.transform(lambda x: x.shift(1).expanding(min_periods=3).std())
     df["mun_yield_volatility"] = mun_std / (df["mun_yield_hist_mean"] + 1e-8)
 
     logger.info("  Features historicas calculadas")
@@ -182,25 +174,34 @@ def merge_features_and_target(df_climate: pd.DataFrame, df_target: pd.DataFrame)
 
 
 def validate_no_leakage(df: pd.DataFrame) -> bool:
-    """Valida que nao ha leakage temporal no dataset."""
+    """Valida que features historicas sao NaN no primeiro ano de cada municipio.
+
+    Aborta o pipeline se qualquer feature derivada do target tiver valor numa
+    linha onde nao existe historico anterior — sintoma de leakage temporal.
+    """
     logger.info("Validando ausencia de leakage temporal...")
 
+    first_year = df.groupby("cod_ibge")["ano"].transform("min")
+    first_rows = df[df["ano"] == first_year]
+
+    historical_cols = [
+        "produtividade_lag1",
+        "produtividade_ma3",
+        "mun_yield_hist_mean",
+        "mun_yield_volatility",
+    ]
+
     issues = []
-
-    first_year_by_mun = df.groupby("cod_ibge")["ano"].min()
-
-    for cod_ibge, first_year in first_year_by_mun.items():
-        mask = (df["cod_ibge"] == cod_ibge) & (df["ano"] == first_year)
-        lag1_value = df.loc[mask, "produtividade_lag1"].values
-
-        if len(lag1_value) > 0 and not pd.isna(lag1_value[0]):
-            issues.append(f"Municipio {cod_ibge}: lag1 nao e NaN no primeiro ano")
+    for col in historical_cols:
+        if col in df.columns:
+            n_bad = int(first_rows[col].notna().sum())
+            if n_bad > 0:
+                issues.append(f"{col}: {n_bad} municipios com valor no primeiro ano")
 
     if issues:
-        for issue in issues[:5]:
-            logger.warning(f"  {issue}")
-        logger.warning(f"  Total de problemas: {len(issues)}")
-        return False
+        for issue in issues:
+            logger.error(f"  {issue}")
+        raise ValueError(f"Leakage temporal detectado: {issues}")
 
     logger.info("  [OK] Nenhum leakage detectado")
     return True
