@@ -1,0 +1,24 @@
+{
+  "ano_validado": 2024,
+  "n_municipios": 2434,
+  "model_mae_kg_ha": 422.2,
+  "model_mape_percent": 17.3,
+  "model_bias_kg_ha": -19.5,
+  "baseline_ma3_mae_kg_ha": 512.3,
+  "baseline_lag1_mae_kg_ha": 613.4,
+  "gain_vs_ma3_percent": -17.6,
+  "by_region": {
+    "sul": {
+      "mae_kg_ha": 486.7,
+      "bias_kg_ha": -141.2,
+      "n": 1006
+    },
+    "cerrado": {
+      "mae_kg_ha": 376.7,
+      "bias_kg_ha": 66.2,
+      "n": 1428
+    }
+  },
+  "conformal_coverage_80_observed": 0.8389,
+  "conformal_coverage_90_observed": 0.9096
+}
