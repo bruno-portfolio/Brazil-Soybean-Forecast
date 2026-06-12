@@ -358,7 +358,7 @@ class TestConfig:
 
     def test_load_config(self):
         """Deve carregar configuracao do arquivo."""
-        config = load_config()
+        config = load_config("target", section="target")
         assert "crop" in config
         assert config["crop"] == "soja"
         assert "year_start" in config
@@ -367,7 +367,7 @@ class TestConfig:
 
     def test_config_validation_params(self):
         """Configuracao deve ter parametros de validacao."""
-        config = load_config()
+        config = load_config("target", section="target")
         validation = config["validation"]
         assert "productivity_min" in validation
         assert "productivity_max" in validation
@@ -393,7 +393,7 @@ class TestWithRealData:
             pytest.skip("Arquivo target_soja.parquet nao existe ainda")
 
         df = pd.read_parquet(real_data_path)
-        config = load_config()
+        config = load_config("target", section="target")
         results = validate_target(df, config)
 
         # Todas as validacoes devem passar

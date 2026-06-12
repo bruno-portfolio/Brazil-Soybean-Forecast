@@ -43,7 +43,7 @@ def sample_climate_df():
 @pytest.fixture
 def config():
     """Carrega configuracao."""
-    return load_config()
+    return load_config("climate", section="climate")
 
 
 class TestValidateTempConsistency:
