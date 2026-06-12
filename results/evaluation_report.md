@@ -1,75 +1,72 @@
 # Relatorio de Avaliacao do Modelo
 
-Data: 2026-01-25 12:01
+Data: 2026-06-12 08:48
 
 ## 1. Resumo Executivo
 
-**SUCESSO**: O modelo LightGBM superou o baseline_ma3 em 5.0% no conjunto de teste.
+**SUCESSO**: O modelo LightGBM superou o baseline_ma3 em 4.2% no conjunto de teste.
 
-- MAE Teste: **532.2 kg/ha** (8.87 sacas/ha)
-- MAPE Teste: **36.1%**
-- Melhor iteracao: 47
+- MAE Teste: **419.6 kg/ha** (6.99 sacas/ha)
+- MAPE Teste: **18.0%**
+- Melhor iteracao: 116
 
 ## 2. Comparacao com Baselines
 
 | Modelo | Split | MAE (kg/ha) | MAE (sc/ha) | MAPE (%) | vs Baseline |
 |--------|-------|-------------|-------------|----------|-------------|
-| baseline_lag1 | Validacao | 509.0 | 8.48 | 19.9 | - |
-| baseline_lag1 | Teste | 678.8 | 11.31 | 42.0 | - |
-| baseline_ma3 | Validacao | 421.2 | 7.02 | 17.2 | - |
-| baseline_ma3 | Teste | 560.1 | 9.34 | 36.1 | - |
-| **LightGBM** | Validacao | **396.2** | **6.60** | **16.4** | +5.9% |
-| **LightGBM** | Teste | **532.2** | **8.87** | **36.1** | +5.0% |
+| baseline_lag1 | Validacao | 733.3 | 12.22 | 64.0 | - |
+| baseline_lag1 | Teste | 625.6 | 10.43 | 20.5 | - |
+| baseline_ma3 | Validacao | 680.7 | 11.34 | 57.0 | - |
+| baseline_ma3 | Teste | 438.0 | 7.30 | 16.2 | - |
+| **LightGBM** | Validacao | **629.2** | **10.49** | **53.7** | +7.6% |
+| **LightGBM** | Teste | **419.6** | **6.99** | **18.0** | +4.2% |
 
 ## 3. Analise de Erro por UF (Top 10 piores)
 
 | UF | MAE (kg/ha) | MAE (sc/ha) | MAPE (%) | N |
 |-----|-------------|-------------|----------|------|
-| MS | 886.0 | 14.77 | 73.5 | 151 |
-| RS | 880.0 | 14.67 | 88.1 | 818 |
-| PR | 831.7 | 13.86 | 64.3 | 750 |
-| AM | 693.0 | 11.55 | 32.2 | 2 |
-| CE | 641.4 | 10.69 | 16.0 | 2 |
-| SC | 612.9 | 10.21 | 29.5 | 369 |
-| RR | 418.1 | 6.97 | 11.8 | 14 |
-| BA | 401.4 | 6.69 | 20.3 | 39 |
-| SP | 371.0 | 6.18 | 12.0 | 824 |
-| PI | 299.6 | 4.99 | 9.3 | 54 |
+| ES | 1316.0 | 21.93 | 33.4 | 2 |
+| PE | 1035.3 | 17.26 | 25.9 | 1 |
+| RS | 739.9 | 12.33 | 54.8 | 435 |
+| RR | 660.9 | 11.01 | 18.8 | 8 |
+| AC | 629.8 | 10.50 | 16.2 | 8 |
+| MS | 541.8 | 9.03 | 15.1 | 78 |
+| BA | 515.0 | 8.58 | 19.5 | 23 |
+| CE | 496.6 | 8.28 | 12.9 | 8 |
+| SC | 481.9 | 8.03 | 13.7 | 218 |
+| PR | 450.5 | 7.51 | 12.2 | 390 |
 
 ## 4. Analise de Erro por Ano
 
 | Ano | MAE (kg/ha) | MAE (sc/ha) | MAPE (%) | N |
 |-----|-------------|-------------|----------|------|
-| 2019 | 386.4 | 6.44 | 16.3 | 2061.0 |
-| 2020 | 457.9 | 7.63 | 22.0 | 2111.0 |
-| 2021 | 345.5 | 5.76 | 11.2 | 2172.0 |
-| 2022 | 667.5 | 11.13 | 57.5 | 2245.0 |
-| 2023 | 400.3 | 6.67 | 15.3 | 2303.0 |
+| 2022 | 629.2 | 10.49 | 53.7 | 2525.0 |
+| 2023 | 419.6 | 6.99 | 18.0 | 2603.0 |
 
 ## 5. Analise de Erro por Faixa de Produtividade
 
 | Faixa (kg/ha) | MAE (kg/ha) | MAE (sc/ha) | MAPE (%) | N |
 |---------------|-------------|-------------|----------|------|
-| 0-1500 | 1685.3 | 28.09 | 223.9 | 483 |
-| 1500-2500 | 744.4 | 12.41 | 38.3 | 644 |
-| 3500+ | 412.0 | 6.87 | 10.5 | 1845 |
-| 2500-3000 | 281.0 | 4.68 | 10.0 | 660 |
-| 3000-3500 | 198.1 | 3.30 | 6.0 | 916 |
+| 0-1500 | 1375.6 | 22.93 | 151.9 | 106 |
+| 1500-2500 | 695.7 | 11.59 | 34.4 | 301 |
+| 3500+ | 400.8 | 6.68 | 10.2 | 1270 |
+| 2500-3000 | 269.9 | 4.50 | 9.6 | 401 |
+| 3000-3500 | 228.4 | 3.81 | 6.9 | 525 |
 
 ## 6. Importancia das Features
 
 | Feature | Importancia |
 |---------|-------------|
-| produtividade_ma3 | 19943709974.00 |
-| trend | 10354654074.00 |
-| precip_vegetativo_mm | 9977177606.00 |
-| produtividade_lag1 | 7574353830.00 |
-| precip_cv | 3262274206.00 |
-| precip_days_gt1mm | 2448759100.00 |
-| sul_x_hot_days_anomaly | 2316813670.00 |
-| hot_days_enchimento | 2218606704.00 |
-| dry_spell_count_7d | 1422372572.00 |
-| sul_x_precip_anomaly | 1326772356.00 |
+| produtividade_ma3 | 58917150326.00 |
+| trend | 19736643312.00 |
+| deficit_ratio_enchimento | 13499875808.00 |
+| produtividade_lag1 | 6430929676.00 |
+| radiation_total | 5825242348.00 |
+| fert_import_ton | 4764903876.00 |
+| precip_vegetativo_mm | 3212713194.00 |
+| deficit_vegetativo_mm | 2959614072.00 |
+| water_deficit_ratio | 2707217082.00 |
+| mun_yield_hist_mean | 2692995472.00 |
 
 ## 7. Graficos
 

@@ -14,6 +14,7 @@ import pandas as pd
 from src.common.constants import REGION_SUL
 from src.common.io import PROJECT_ROOT
 from src.modeling.split import create_temporal_split, get_feature_columns
+from src.modeling.train_regional import prepare_data
 
 MODELS_PATH = PROJECT_ROOT / "models"
 RESULTS_PATH = PROJECT_ROOT / "results"
@@ -41,18 +42,6 @@ def add_region_column(df: pd.DataFrame) -> pd.DataFrame:
     df["uf_cod"] = df["cod_ibge"].astype(str).str[:2].astype(int)
     df["is_sul"] = df["uf_cod"].isin(REGION_SUL).astype(int)
     return df
-
-
-def prepare_data(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    target_col: str = "produtividade_kg_ha",
-) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-    """Prepara dados para treinamento. Retorna X, y e DataFrame limpo."""
-    df_clean = df.dropna(subset=feature_cols + [target_col])
-    X = df_clean[feature_cols].values
-    y = df_clean[target_col].values
-    return X, y, df_clean
 
 
 from src.common.conformal import ConformalCalibrator  # noqa: F401
@@ -110,8 +99,8 @@ def train_conformal_predictors() -> ConformalResult:
     val_sul = split.validation[split.validation["is_sul"] == 1]
     test_sul = split.test[split.test["is_sul"] == 1]
 
-    X_val_sul, y_val_sul, _ = prepare_data(val_sul, feature_cols)
-    X_test_sul, y_test_sul, _ = prepare_data(test_sul, feature_cols)
+    X_val_sul, y_val_sul = prepare_data(val_sul, feature_cols)
+    X_test_sul, y_test_sul = prepare_data(test_sul, feature_cols)
 
     logger.info(f"  Calibracao: {len(X_val_sul):,} amostras")
     logger.info(f"  Teste: {len(X_test_sul):,} amostras")
@@ -144,8 +133,8 @@ def train_conformal_predictors() -> ConformalResult:
     val_cerrado = split.validation[split.validation["is_sul"] == 0]
     test_cerrado = split.test[split.test["is_sul"] == 0]
 
-    X_val_cerrado, y_val_cerrado, _ = prepare_data(val_cerrado, feature_cols)
-    X_test_cerrado, y_test_cerrado, _ = prepare_data(test_cerrado, feature_cols)
+    X_val_cerrado, y_val_cerrado = prepare_data(val_cerrado, feature_cols)
+    X_test_cerrado, y_test_cerrado = prepare_data(test_cerrado, feature_cols)
 
     logger.info(f"  Calibracao: {len(X_val_cerrado):,} amostras")
     logger.info(f"  Teste: {len(X_test_cerrado):,} amostras")
@@ -234,24 +223,6 @@ def train_conformal_predictors() -> ConformalResult:
     result_path = RESULTS_PATH / "conformal_result.json"
     with open(result_path, "w") as f:
         json.dump(asdict(result), f, indent=2)
-
-    logger.info("\n" + "=" * 60)
-    logger.info("COMPARATIVO: QUANTILE vs CONFORMAL")
-    logger.info("=" * 60)
-
-    logger.info("\n{:<25} {:>15} {:>15}".format("Metrica", "Quantile", "Conformal"))
-    logger.info("-" * 55)
-    logger.info(
-        "{:<25} {:>15.1f}% {:>15.1f}%".format(
-            "Cobertura 80% Combinada", 50.4, coverage_80_combined * 100
-        )
-    )
-    logger.info(
-        "{:<25} {:>15.0f} {:>15.0f}".format("Largura Intervalo 80%", 861, width_80_combined)
-    )
-
-    improvement = (coverage_80_combined * 100 - 50.4) / 50.4 * 100
-    logger.info(f"\n  Melhoria na cobertura: +{improvement:.0f}%")
 
     logger.info(f"\n  Tempo de calibracao: {training_time:.1f}s")
 

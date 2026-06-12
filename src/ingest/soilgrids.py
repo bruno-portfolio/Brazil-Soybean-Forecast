@@ -186,53 +186,33 @@ def aggregate_depths(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 
     properties = config["properties"]
 
+    def weighted_depth_mean(cols: list[str], prop: str, weights: dict) -> pd.Series:
+        """Media ponderada por espessura, ignorando camadas faltantes linha a linha."""
+        values = df[cols]
+        w = pd.Series({c: weights.get(c.replace(f"{prop}_", ""), 1) for c in cols})
+        denom = values.notna().mul(w).sum(axis=1)
+        num = values.fillna(0).mul(w).sum(axis=1)
+        return num / denom.where(denom > 0)
+
+    # Pesos proporcionais a espessura da camada (cm)
+    surface_weights = {"0-5cm": 5, "5-15cm": 10, "15-30cm": 15}
+    subsurface_weights = {"30-60cm": 30, "60-100cm": 40}
+
     for prop in properties:
         surface_cfg = aggregation["surface"]
-        surface_depths = surface_cfg["depths"]
-        surface_label = surface_cfg["label"]
-
-        surface_cols = [f"{prop}_{d}" for d in surface_depths if f"{prop}_{d}" in df.columns]
+        surface_cols = [f"{prop}_{d}" for d in surface_cfg["depths"] if f"{prop}_{d}" in df.columns]
         if surface_cols:
-            # Pesos proporcionais a espessura da camada (cm)
-            weights = {"0-5cm": 5, "5-15cm": 10, "15-30cm": 15}
-            total_weight = sum(
-                weights.get(d.split("_")[-1], 1)
-                for d in surface_depths
-                if f"{prop}_{d.split('_')[-1]}" in surface_cols
-            )
-
-            weighted_sum = 0
-            for col in surface_cols:
-                depth = col.replace(f"{prop}_", "")
-                w = weights.get(depth, 1)
-                weighted_sum += df[col].fillna(0) * w
-
-            result[f"{prop}_{surface_label}"] = (
-                weighted_sum / total_weight if total_weight > 0 else None
+            result[f"{prop}_{surface_cfg['label']}"] = weighted_depth_mean(
+                surface_cols, prop, surface_weights
             )
 
         subsurface_cfg = aggregation["subsurface"]
-        subsurface_depths = subsurface_cfg["depths"]
-        subsurface_label = subsurface_cfg["label"]
-
-        subsurface_cols = [f"{prop}_{d}" for d in subsurface_depths if f"{prop}_{d}" in df.columns]
+        subsurface_cols = [
+            f"{prop}_{d}" for d in subsurface_cfg["depths"] if f"{prop}_{d}" in df.columns
+        ]
         if subsurface_cols:
-            # Pesos proporcionais a espessura da camada (cm)
-            weights = {"30-60cm": 30, "60-100cm": 40}
-            total_weight = sum(
-                weights.get(d.split("_")[-1], 1)
-                for d in subsurface_depths
-                if f"{prop}_{d.split('_')[-1]}" in subsurface_cols
-            )
-
-            weighted_sum = 0
-            for col in subsurface_cols:
-                depth = col.replace(f"{prop}_", "")
-                w = weights.get(depth, 1)
-                weighted_sum += df[col].fillna(0) * w
-
-            result[f"{prop}_{subsurface_label}"] = (
-                weighted_sum / total_weight if total_weight > 0 else None
+            result[f"{prop}_{subsurface_cfg['label']}"] = weighted_depth_mean(
+                subsurface_cols, prop, subsurface_weights
             )
 
     df_agg = pd.DataFrame(result)

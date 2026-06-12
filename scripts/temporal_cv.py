@@ -92,7 +92,7 @@ def run_temporal_cv() -> dict:
                 X_va_s,
                 y_va_s,
                 feature_cols,
-                config.sul_params,
+                config.params,
                 config.early_stopping_rounds,
                 config.early_stopping_enabled,
             )

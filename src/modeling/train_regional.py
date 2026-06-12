@@ -32,7 +32,6 @@ class RegionalModelConfig:
     params: dict[str, Any]
     early_stopping_rounds: int
     early_stopping_enabled: bool
-    sul_params: dict[str, Any] | None = None
 
 
 @dataclass
@@ -59,17 +58,11 @@ def load_config() -> RegionalModelConfig:
     algorithm = model_cfg["algorithm"]
     params = model_cfg.get(algorithm, {}).copy()
 
-    sul_params = params.copy()
-    sul_params["min_data_in_leaf"] = max(10, sul_params.get("min_data_in_leaf", 20))
-    sul_params["lambda_l1"] = sul_params.get("lambda_l1", 0.1)
-    sul_params["lambda_l2"] = sul_params.get("lambda_l2", 0.1)
-
     return RegionalModelConfig(
         algorithm=algorithm,
         params=params,
         early_stopping_rounds=model_cfg["early_stopping"]["rounds"],
         early_stopping_enabled=model_cfg["early_stopping"]["enabled"],
-        sul_params=sul_params,
     )
 
 
@@ -176,14 +169,14 @@ def train_regional_models() -> RegionalTrainingResult:
     X_val_sul, y_val_sul = prepare_data(val_sul, feature_cols)
     X_test_sul, y_test_sul = prepare_data(test_sul, feature_cols)
 
-    logger.info("\n  Treinando modelo Sul com params especificos...")
+    logger.info("\n  Treinando modelo Sul...")
     model_sul, best_iter_sul = train_lightgbm(
         X_train_sul,
         y_train_sul,
         X_val_sul,
         y_val_sul,
         feature_cols,
-        config.sul_params,
+        config.params,
         config.early_stopping_rounds,
         config.early_stopping_enabled,
     )

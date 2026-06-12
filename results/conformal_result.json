@@ -1,12 +1,12 @@
 {
-  "sul_calibrator_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\conformal_sul.pkl",
-  "cerrado_calibrator_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\conformal_cerrado.pkl",
-  "coverage_80_sul": 0.579212916246216,
-  "coverage_80_cerrado": 0.819129140305173,
-  "coverage_80_combined": 0.7172842150353395,
-  "coverage_90_sul": 0.7013118062563067,
-  "coverage_90_cerrado": 0.9129140305173056,
-  "coverage_90_combined": 0.823088455772114,
-  "interval_width_80": 1212.9557478643776,
-  "interval_width_90": 1653.726098080048
+  "sul_calibrator_path": "C:\\Dev - Projetos\\Machine Learning\\Brazil-Soybean-Forecast\\models\\conformal_sul.pkl",
+  "cerrado_calibrator_path": "C:\\Dev - Projetos\\Machine Learning\\Brazil-Soybean-Forecast\\models\\conformal_cerrado.pkl",
+  "coverage_80_sul": 0.9741131351869607,
+  "coverage_80_cerrado": 0.8076923076923077,
+  "coverage_80_combined": 0.8743757203227046,
+  "coverage_90_sul": 0.9961649089165868,
+  "coverage_90_cerrado": 0.9064102564102564,
+  "coverage_90_combined": 0.9423741836342682,
+  "interval_width_80": 1727.1494159093752,
+  "interval_width_90": 2192.5584378621684
 }

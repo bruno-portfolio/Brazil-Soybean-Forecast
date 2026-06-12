@@ -36,11 +36,10 @@ def load_baselines() -> dict[str, Any]:
 
 
 def add_predictions(df: pd.DataFrame, model, feature_cols: list[str]) -> pd.DataFrame:
-    """Adiciona predicoes ao DataFrame."""
+    """Adiciona predicoes ao DataFrame. Dropa apenas target NaN (LightGBM lida com NaN em features)."""
     df = df.copy()
 
-    mask = df[feature_cols].notna().all(axis=1)
-    df_valid = df[mask].copy()
+    df_valid = df.dropna(subset=["produtividade_kg_ha"]).copy()
 
     X = df_valid[feature_cols].values
     df_valid["pred"] = model.predict(X)

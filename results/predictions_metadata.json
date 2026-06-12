@@ -1,16 +1,19 @@
 {
-  "inference_date": "2026-01-24T16:55:33.882105",
-  "model_version": "v1",
+  "inference_date": "2026-06-12T09:15:45.216292",
+  "model_version": "v3-regional",
   "prediction_type": "ex-post",
-  "prediction_description": "Previsoes usando clima observado (nao e forecast real)",
+  "prediction_description": "Previsoes usando clima observado (nao e forecast real). produtividade_lag1/ma3 usam o ultimo dado PAM disponivel, que pode estar defasado em relacao ao ano previsto.",
   "years_predicted": [
     2024,
     2025
   ],
   "n_municipalities": 2456,
   "n_predictions": 4912,
-  "dataset_hash": "52fe7aeca741",
-  "model_path": "C:\\Users\\Bruno\\projetos\\Machine Learning\\soja-produtividade\\models\\model_v1.pkl",
+  "dataset_hash": "a6979f67458e",
+  "model_paths": [
+    "C:\\Dev - Projetos\\Machine Learning\\Brazil-Soybean-Forecast\\models\\model_sul.pkl",
+    "C:\\Dev - Projetos\\Machine Learning\\Brazil-Soybean-Forecast\\models\\model_cerrado.pkl"
+  ],
   "feature_names": [
     "precip_total_mm",
     "tmean_avg",
@@ -41,6 +44,19 @@
     "dry_spell_count_10d",
     "precip_cv",
     "precip_days_gt1mm",
+    "eto_total_mm",
+    "eto_mean_mm",
+    "water_deficit_mm",
+    "water_deficit_ratio",
+    "radiation_mean",
+    "radiation_total",
+    "eto_plantio_mm",
+    "deficit_plantio_mm",
+    "eto_vegetativo_mm",
+    "deficit_vegetativo_mm",
+    "eto_enchimento_mm",
+    "deficit_enchimento_mm",
+    "deficit_ratio_enchimento",
     "oni_avg",
     "oni_min",
     "oni_max",
@@ -50,6 +66,8 @@
     "produtividade_lag1",
     "produtividade_ma3",
     "trend",
+    "mun_yield_hist_mean",
+    "mun_yield_volatility",
     "precip_anomaly",
     "temp_anomaly",
     "hot_days_anomaly",
@@ -62,70 +80,119 @@
     "heat_drought_stress",
     "enchimento_stress",
     "el_nino_x_precip_anom",
+    "la_nina_x_deficit",
+    "terminal_drought_stress",
     "is_sul",
     "sul_x_la_nina",
     "sul_x_precip_anomaly",
-    "sul_x_hot_days_anomaly"
+    "sul_x_hot_days_anomaly",
+    "clay_0_30cm",
+    "sand_0_30cm",
+    "silt_0_30cm",
+    "phh2o_0_30cm",
+    "soc_0_30cm",
+    "nitrogen_0_30cm",
+    "cec_0_30cm",
+    "bdod_0_30cm",
+    "clay_30_100cm",
+    "sand_30_100cm",
+    "phh2o_30_100cm",
+    "clay_sand_ratio",
+    "awc_estimated",
+    "ph_acidic",
+    "soil_quality_index",
+    "clay_x_precip_deficit",
+    "awc_x_dry_spell",
+    "sand_x_drought",
+    "ph_x_cerrado",
+    "soc_x_heat_stress",
+    "sand_x_la_nina_sul",
+    "cec_normalized",
+    "awc_x_deficit",
+    "sand_x_deficit",
+    "pct_irrigado",
+    "fert_import_ton",
+    "sinistro_rate_3yr",
+    "pct_soja",
+    "irrigacao_x_deficit",
+    "fert_x_precip",
+    "sinistro_x_la_nina",
+    "ndvi_mean_safra",
+    "ndvi_max_safra",
+    "ndvi_min_safra",
+    "ndvi_amplitude",
+    "ndvi_plantio",
+    "ndvi_vegetativo",
+    "ndvi_enchimento",
+    "ndvi_x_precip_deficit",
+    "ndvi_ench_x_la_nina"
   ],
-  "model_test_metrics": {},
+  "model_test_metrics": {
+    "mae_kg_ha": 401.47,
+    "mae_sacas_ha": 6.69,
+    "rmse_kg_ha": 543.06,
+    "rmse_sacas_ha": 9.05,
+    "mape_percent": 16.51,
+    "n_samples": 2603
+  },
   "statistics_by_year": {
     "2024": {
       "n_municipalities": 2456,
-      "pred_mean_kg_ha": 3219.9,
-      "pred_median_kg_ha": 3238.7,
-      "pred_std_kg_ha": 428.1,
-      "pred_min_kg_ha": 2010.9,
-      "pred_max_kg_ha": 3920.4
+      "pred_mean_kg_ha": 3040.0,
+      "pred_median_kg_ha": 3062.6,
+      "pred_std_kg_ha": 381.4,
+      "pred_min_kg_ha": 1439.6,
+      "pred_max_kg_ha": 4146.2
     },
     "2025": {
       "n_municipalities": 2456,
-      "pred_mean_kg_ha": 3192.8,
-      "pred_median_kg_ha": 3254.8,
-      "pred_std_kg_ha": 464.0,
-      "pred_min_kg_ha": 1916.4,
-      "pred_max_kg_ha": 3934.1
+      "pred_mean_kg_ha": 3081.3,
+      "pred_median_kg_ha": 3179.2,
+      "pred_std_kg_ha": 450.8,
+      "pred_min_kg_ha": 1354.1,
+      "pred_max_kg_ha": 4127.9
     }
   },
   "statistics_by_uf": {
     "SP": {
       "n_municipalities": 914,
-      "pred_mean_kg_ha": 3302.2
+      "pred_mean_kg_ha": 3059.0
     },
     "RS": {
       "n_municipalities": 850,
-      "pred_mean_kg_ha": 2610.2
+      "pred_mean_kg_ha": 2630.5
     },
     "PR": {
       "n_municipalities": 766,
-      "pred_mean_kg_ha": 3064.6
+      "pred_mean_kg_ha": 2910.9
     },
     "MG": {
       "n_municipalities": 514,
-      "pred_mean_kg_ha": 3673.1
+      "pred_mean_kg_ha": 3484.6
     },
     "GO": {
       "n_municipalities": 420,
-      "pred_mean_kg_ha": 3514.5
+      "pred_mean_kg_ha": 3341.5
     },
     "SC": {
       "n_municipalities": 408,
-      "pred_mean_kg_ha": 3183.5
+      "pred_mean_kg_ha": 3047.9
     },
     "MT": {
       "n_municipalities": 254,
-      "pred_mean_kg_ha": 3581.8
+      "pred_mean_kg_ha": 3398.4
     },
     "TO": {
       "n_municipalities": 184,
-      "pred_mean_kg_ha": 3233.0
+      "pred_mean_kg_ha": 3063.6
     },
     "MS": {
       "n_municipalities": 154,
-      "pred_mean_kg_ha": 3286.2
+      "pred_mean_kg_ha": 3132.8
     },
     "MA": {
       "n_municipalities": 142,
-      "pred_mean_kg_ha": 3230.3
+      "pred_mean_kg_ha": 3133.1
     }
   }
 }
