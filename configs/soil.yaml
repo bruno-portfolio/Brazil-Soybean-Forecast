@@ -107,8 +107,8 @@ soil:
     # Capacidade de agua disponivel estimada (AWC)
     # Baseado em Saxton & Rawls (2006) - simplificado
     - name: awc_estimated
-      formula: "0.76 * clay_pct - 0.4 * sand_pct + 2.5"
-      unit: "mm/cm"
+      formula: "clip(0.76 * clay_pct - 0.4 * sand_pct + 25, 5, 25)"
+      unit: "%vol"
 
     # Indice de qualidade do solo (composto)
     - name: soil_quality_index

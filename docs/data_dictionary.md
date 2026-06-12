@@ -10,8 +10,8 @@ Este documento descreve todas as variaveis do dataset `data/processed/dataset_fi
 | Municipios unicos   | 2,763            |
 | Periodo             | 2000 - 2023      |
 | Anos                | 24               |
-| Total de colunas    | 106              |
-| Total de features   | 101              |
+| Total de colunas    | 117              |
+| Total de features   | 112 (111 numericas usadas pelo modelo) |
 | Granularidade       | Municipio x Ano  |
 | Chave primaria      | (cod_ibge, ano)  |
 
@@ -24,14 +24,16 @@ Este documento descreve todas as variaveis do dataset `data/processed/dataset_fi
 | Seca | 5 | dry_spell_max, precip_cv |
 | Water balance | 13 | eto_total_mm, water_deficit_mm, deficit_enchimento_mm |
 | ENSO | 6 | oni_avg, is_la_nina |
-| Historico | 3 | produtividade_lag1, produtividade_ma3, trend |
+| Historico / identidade municipal | 5 | produtividade_lag1, produtividade_ma3, trend, mun_yield_hist_mean, mun_yield_volatility |
 | Anomalias | 6 | precip_anomaly, temp_anomaly |
 | Interacoes ENSO | 8 | la_nina_x_deficit, terminal_drought_stress |
 | Regional | 4 | is_sul, sul_x_la_nina |
 | Solo | 16 | clay_0_30cm, awc_estimated, soil_quality_index |
 | Interacoes solo | 9 | clay_x_precip_deficit, awc_x_deficit |
-| Fontes novas | 4 | pct_irrigado, fert_import_ton, sinistro_rate_3yr, pct_soja |
+| Fontes novas | 5 | pct_irrigado, fert_import_ton, fert_total_br_ton, sinistro_rate_3yr, pct_soja |
 | Interacoes fontes novas | 3 | irrigacao_x_deficit, fert_x_precip, sinistro_x_la_nina |
+| NDVI (MODIS) | 7 | ndvi_mean_safra, ndvi_plantio, ndvi_enchimento |
+| Interacoes NDVI | 2 | ndvi_x_precip_deficit, ndvi_ench_x_la_nina |
 
 ## Variaveis
 
@@ -160,16 +162,19 @@ Indice ONI (Oceanic Nino Index) que indica El Nino/La Nina.
 
 Features que capturam comportamento passado da produtividade, sem usar informacao do ano atual.
 
-| Coluna             | Tipo    | Descricao                                           | Missing   |
-|--------------------|---------|-----------------------------------------------------|-----------|
-| produtividade_lag1 | float64 | Produtividade do ano anterior (t-1)                 | 5.7%*     |
-| produtividade_ma3  | float64 | Media movel dos 3 anos anteriores (t-1, t-2, t-3)   | ~0%       |
-| trend              | float64 | Ano normalizado [0, 1] para capturar tendencia      | 0%        |
+| Coluna               | Tipo    | Descricao                                                  | Missing |
+|----------------------|---------|------------------------------------------------------------|---------|
+| produtividade_lag1   | float64 | Produtividade do ano anterior (t-1)                        | 5.7%*   |
+| produtividade_ma3    | float64 | Media movel dos 3 anos anteriores (t-1, t-2, t-3)          | 5.7%*   |
+| trend                | float64 | Ano normalizado para capturar tendencia                    | 0%      |
+| mun_yield_hist_mean  | float64 | Media expanding do historico do municipio (min 3 anos, t-1)| 16.6%** |
+| mun_yield_volatility | float64 | CV (std/media) do historico do municipio (min 3 anos, t-1) | 16.6%** |
 
 **Notas:**
-- (*) Missing em lag1 ocorre no primeiro ano de cada municipio no dataset
-- `trend = (ano - 2000) / (2023 - 2000)` = progresso temporal normalizado
-- **Zero leakage garantido:** todas as features historicas usam apenas dados de anos anteriores
+- (*) Missing ocorre no primeiro ano de cada municipio no dataset
+- (**) Missing nos 3 primeiros anos de cada municipio (expanding exige minimo de 3 anos anteriores)
+- `trend = (ano - 2000) / (2025 - 2000)` — referencias fixas em `configs/features.yaml` para comparabilidade entre modelos
+- **Leakage validado no pipeline:** `validate_no_leakage` aborta o build se qualquer feature historica tiver valor no primeiro ano de um municipio
 
 ## Validacoes de Qualidade
 
@@ -212,10 +217,20 @@ feature_cols = [c for c in df.columns if c not in exclude_cols]
 X = df[feature_cols]
 y = df[target_col]
 
-print(f"Features: {len(feature_cols)}")  # 38 features
+print(f"Features: {len(feature_cols)}")  # 112 features
 ```
 
 ## Changelog
+
+### v3.1 (2026-06-12)
+- Corrigido leakage cross-municipio em `produtividade_ma3` (rolling sem groupby); missing passou de ~0% para 5.7% (comportamento correto)
+- `sinistro_rate_3yr` passa a usar apenas anos anteriores (shift)
+- Documentadas `mun_yield_hist_mean`, `mun_yield_volatility`, NDVI e fontes novas
+- Formula do `trend` corrigida na doc (referencia 2025, nao 2023)
+
+### v3.0
+- Adicionadas 9 features NDVI (MODIS) e 2 de identidade municipal
+- Total de colunas: 106 → 117
 
 ### v2.0 (2026-01-24) - Fase 1 de Melhorias
 - Adicionadas 18 features de janela fenologica quebrada (6 por fase x 3 fases)
